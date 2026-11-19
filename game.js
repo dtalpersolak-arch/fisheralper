@@ -42,24 +42,31 @@ let socket = null;
 let remotePlayers = {};
 let lastMoveEmitTime = 0;
 
+const PRIMARY_RAILWAY_URL = 'https://fishingalper-production.up.railway.app';
+
 function getServerApiUrl(endpoint) {
     if (!endpoint) endpoint = '';
     if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : (endpoint ? `/${endpoint}` : '');
 
-    // 1. Manuel belirlenmiş sunucu URL'si (ör. Railway)
+    // 1. Manuel belirlenmiş sunucu URL'si (ör. localStorage veya URL query param)
     const customUrl = SafeStorage.getItem('mmo_server_url') || (new URLSearchParams(window.location.search).get('server'));
     if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
         return customUrl.trim().replace(/\/$/, '') + cleanEndpoint;
     }
 
-    // 2. Dosya protokolü (file:///) veya port 3000 harici yerel sunucu (Live Server 5500 vb.)
-    if (window.location.protocol === 'file:' || (window.location.port && window.location.port !== '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))) {
-        return `http://localhost:3000${cleanEndpoint}`;
+    // 2. Doğrudan Railway canlı adresinde çalışıyorsa aynı origin (relative) kullan
+    if (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname.includes('railway.app')) {
+        return cleanEndpoint;
     }
 
-    // 3. Varsayılan aynı origin
-    return cleanEndpoint;
+    // 3. Yerel makinede özel bir geliştirme Node.js sunucusu (localhost:3000) açıkça test ediliyorsa
+    if (typeof window !== 'undefined' && window.location && window.location.port === '3000' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        return cleanEndpoint;
+    }
+
+    // 4. Varsayılan olarak tüm harici / yerel ortamlarda (file:///, Live Server 5500, vb.) Railway Canlı Sunucusuna bağlan
+    return `${PRIMARY_RAILWAY_URL}${cleanEndpoint}`;
 }
 
 function normalizeMapId(id) {
@@ -14196,24 +14203,23 @@ async function checkServerStatus() {
             }
         }
     } catch (e) {
-        // Eğer localhost:3000 denendiyse ve relative url farklıysa relative url dene
-        if (tryUrl.startsWith('http://localhost:3000') && window.location.protocol !== 'file:') {
-            try {
-                const res2 = await fetch('/api/status', { method: 'GET', cache: 'no-cache' });
-                if (res2.ok) {
-                    let data2 = null;
-                    try { data2 = await res2.json(); } catch (e2) {}
-                    const isOnline2 = data2 ? (data2.online === true || data2.status === 'online' || data2.onlinePlayers !== undefined) : true;
-                    if (isOnline2) {
-                        serverOnline = true;
-                        if (dot) dot.className = 'auth-status-dot online';
-                        const count2 = (data2 && data2.onlinePlayers !== undefined) ? data2.onlinePlayers : 0;
-                        if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${count2} Oyuncu Aktif)`;
-                        return true;
-                    }
+        // Fallback denemesi: Farklı bir yoldan (/api/status veya Railway tam url) tekrar dene
+        const fallbackUrl = tryUrl.startsWith('http') ? '/api/status' : `${PRIMARY_RAILWAY_URL}/api/status`;
+        try {
+            const res2 = await fetch(fallbackUrl, { method: 'GET', cache: 'no-cache' });
+            if (res2.ok) {
+                let data2 = null;
+                try { data2 = await res2.json(); } catch (e2) {}
+                const isOnline2 = data2 ? (data2.online === true || data2.status === 'online' || data2.onlinePlayers !== undefined) : true;
+                if (isOnline2) {
+                    serverOnline = true;
+                    if (dot) dot.className = 'auth-status-dot online';
+                    const count2 = (data2 && data2.onlinePlayers !== undefined) ? data2.onlinePlayers : 0;
+                    if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${count2} Oyuncu Aktif)`;
+                    return true;
                 }
-            } catch (e2) {}
-        }
+            }
+        } catch (e2) {}
     }
 
     serverOnline = false;

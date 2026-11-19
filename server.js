@@ -565,6 +565,10 @@ app.get('/api/market', async (req, res) => {
 });
 
 // 7. SUNUCU DURUMU (Ping / Health)
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 app.get('/api/status', (req, res) => {
     res.json({
         online: true,
@@ -747,4 +751,27 @@ initDatabase().then(() => {
         console.log(`🌐 URL: http://localhost:${PORT}`);
         console.log(`====================================================`);
     });
+});
+
+// Güvenli Kapatma (Railway & Docker SIGTERM / SIGINT Uyumlu)
+function gracefulShutdown(signal) {
+    console.log(`🛑 ${signal} sinyali alındı. Sunucu güvenli bir şekilde kapatılıyor...`);
+    saveJsonDb(true);
+    server.close(() => {
+        console.log('✅ HTTP ve Socket sunucusu kapatıldı.');
+        process.exit(0);
+    });
+    setTimeout(() => {
+        console.warn('⚠️ Sunucu zorla kapatıldı (zaman aşımı).');
+        process.exit(0);
+    }, 4000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+    console.error('🔥 Yakalanmamış İstisna (uncaughtException):', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('🔥 İşlenmemiş Promise Reddi (unhandledRejection):', reason);
 });
