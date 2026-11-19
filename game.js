@@ -13975,34 +13975,39 @@ function updateAdminPrivileges() {
 // ============================================================================
 function applyLoadedCharacter(c) {
     if (!c) return;
-    if (c.name) player.name = c.name;
-    if (c.level !== undefined) player.level = c.level;
-    if (c.exp !== undefined) player.exp = c.exp;
-    if (c.gold !== undefined) player.gold = c.gold;
-    if (c.skillPoints !== undefined) player.skillPoints = c.skillPoints;
-    if (c.skills) Object.assign(player.skills, c.skills);
-    if (c.equipped) Object.assign(player.equipped, c.equipped);
-    if (Array.isArray(c.inventory)) player.inventory = c.inventory;
-    if (Array.isArray(c.storage)) player.storage = c.storage;
-    if (Array.isArray(c.ownedBoats)) player.ownedBoats = c.ownedBoats;
-    if (c.activeBoatId) player.activeBoatId = c.activeBoatId;
-    if (c.rodEnchants) Object.assign(player.rodEnchants, c.rodEnchants);
-    if (c.costumeEnchants) Object.assign(player.costumeEnchants, c.costumeEnchants);
-    if (c.guildName) {
-        player.guildName = c.guildName;
-        SafeStorage.setItem('mmo_player_guild', c.guildName);
+    try {
+        if (c.name) player.name = c.name;
+        if (c.level !== undefined) player.level = c.level;
+        if (c.exp !== undefined) player.exp = c.exp;
+        if (c.gold !== undefined) player.gold = c.gold;
+        if (c.skillPoints !== undefined) player.skillPoints = c.skillPoints;
+        if (c.skills) Object.assign(player.skills, c.skills);
+        if (c.equipped) Object.assign(player.equipped, c.equipped);
+        if (Array.isArray(c.inventory)) player.inventory = c.inventory;
+        if (Array.isArray(c.storage)) player.storage = c.storage;
+        if (Array.isArray(c.ownedBoats)) player.ownedBoats = c.ownedBoats;
+        if (c.activeBoatId) player.activeBoatId = c.activeBoatId;
+        if (c.rodEnchants) Object.assign(player.rodEnchants, c.rodEnchants);
+        if (c.costumeEnchants) Object.assign(player.costumeEnchants, c.costumeEnchants);
+        if (c.guildName) {
+            player.guildName = c.guildName;
+            SafeStorage.setItem('mmo_player_guild', c.guildName);
+        }
+        if (c.mapId) {
+            currentMapId = normalizeMapId(c.mapId);
+        }
+        if (c.x !== undefined && c.y !== undefined) {
+            player.x = Number(c.x);
+            player.y = Number(c.y);
+        }
+        SafeStorage.setItem('mmo_character_name', player.name);
+
+        if (typeof updateExpHUD === 'function') updateExpHUD();
+        if (typeof renderInventoryUI === 'function') renderInventoryUI();
+        if (typeof renderBuffBar === 'function') renderBuffBar();
+    } catch (applyErr) {
+        console.warn('applyLoadedCharacter sırasında UI uyarısı:', applyErr);
     }
-    if (c.mapId) {
-        currentMapId = normalizeMapId(c.mapId);
-    }
-    if (c.x !== undefined && c.y !== undefined) {
-        player.x = Number(c.x);
-        player.y = Number(c.y);
-    }
-    SafeStorage.setItem('mmo_character_name', player.name);
-    updateExpHUD();
-    updateInventoryBadge();
-    renderBuffBar();
 }
 
 async function saveCharacterToServer() {
