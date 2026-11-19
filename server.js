@@ -482,7 +482,7 @@ app.post('/api/character/create', authMiddleware, async (req, res) => {
             skillPoints: 0,
             x: 13.5,
             y: 11.5,
-            mapId: 'burnaz',
+            mapId: 'burnaz_sahil',
             guildName: '',
             ownedBoats: [],
             activeBoatId: 'boat_raft',
@@ -606,7 +606,12 @@ io.on('connection', (socket) => {
             } catch (e) {}
         }
 
-        const safeMap = mapId || 'burnaz';
+        function normalizeServerMap(m) {
+            if (!m || m === 'burnaz') return 'burnaz_sahil';
+            return m;
+        }
+
+        const safeMap = normalizeServerMap(mapId);
         onlinePlayers[socket.id] = {
             socketId: socket.id,
             userId,
@@ -669,7 +674,7 @@ io.on('connection', (socket) => {
         if (!p) return;
 
         const oldMap = p.mapId;
-        const newMap = data.newMapId || 'burnaz';
+        const newMap = (data.newMapId === 'burnaz' || !data.newMapId) ? 'burnaz_sahil' : data.newMapId;
 
         socket.leave(`map_${oldMap}`);
         socket.to(`map_${oldMap}`).emit('player_left', socket.id);

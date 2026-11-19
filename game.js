@@ -62,6 +62,11 @@ function getServerApiUrl(endpoint) {
     return cleanEndpoint;
 }
 
+function normalizeMapId(id) {
+    if (!id || id === 'burnaz') return 'burnaz_sahil';
+    return id;
+}
+
 function saveLocalAccount(username, email, password, role) {
     try {
         const raw = SafeStorage.getItem('mmo_local_accounts');
@@ -2713,6 +2718,7 @@ function returnFromKrakenToDortyolDueToEndOfEvent() {
     player.x = 21.5;
     player.y = 7.5;
     player.path = [];
+    notifyMapChange('dortyol', 21.5, 7.5);
     if (activeGuild) {
         activeGuild.krakenActive = false;
         saveGuildData();
@@ -4020,11 +4026,12 @@ function interactWithObject(inter) {
     cancelFishing();
 
     if (inter.type === 'teleport') {
-        currentMapId = inter.targetMap;
+        currentMapId = normalizeMapId(inter.targetMap);
         player.x = inter.targetX;
         player.y = inter.targetY;
         player.path = [];
         player.targetMarker = null;
+        notifyMapChange(currentMapId, player.x, player.y);
         showToast(`💠 ${getActiveMap().name} bölgesine ışınlandın!`, '#4cc9f0');
         return;
     }
@@ -4926,6 +4933,7 @@ function renderShipyardModal(container) {
                 player.y = 17.5;
                 player.path = [];
                 player.targetMarker = null;
+                notifyMapChange('akdeniz', 13.5, 17.5);
                 document.getElementById('npc-modal').classList.add('hidden');
                 showToast(`⛵ ${boat.name} ile Akdeniz sularına ışınlandın! Sarı Bereket Bölgesinde 1.5x değerli balık şansı seni bekliyor!`, '#4cc9f0');
             };
@@ -7329,6 +7337,7 @@ function renderGuildNPCModal(container) {
                         player.x = 13.5;
                         player.y = 13.5;
                         player.path = [];
+                        notifyMapChange('kraken', 13.5, 13.5);
                         document.getElementById('npc-modal').classList.add('hidden');
                         addChatMessage('Lonca', `🚨 Lonca Lideri [${player.name}] Lonca Destroyer'i ile Kızıl Okyanus Kraken seferini başlattı! Tüm üyeler Karargâhtan tekneye ışınlanabilir!`, 'system');
                         showToast("🦑 Kızıl Okyanus'a varıldı! Lonca Destroyer'i emrinde.", '#ffd166');
@@ -7357,6 +7366,7 @@ function renderGuildNPCModal(container) {
                             player.x = 13.5;
                             player.y = 13.5;
                             player.path = [];
+                            notifyMapChange('kraken', 13.5, 13.5);
                             document.getElementById('npc-modal').classList.add('hidden');
                             showToast("⚓ Lonca Destroyer'ine katıldın! Lider ve lonca üyelerinle birliktesin.", '#4cc9f0');
                             addChatMessage('Lonca', `[${player.name}] Lonca Destroyer'ine katıldı.`, 'system');
@@ -13285,6 +13295,19 @@ function update(dt) {
             player.x = next.x;
             player.y = next.y;
             player.path.shift();
+            if (player.path.length === 0) {
+                if (socket && socket.connected) {
+                    socket.emit('player_move', {
+                        x: Number(player.x.toFixed(2)),
+                        y: Number(player.y.toFixed(2)),
+                        dirX: Number((player.dirX || 1).toFixed(2)),
+                        dirY: Number((player.dirY || 0).toFixed(2)),
+                        isMoving: false,
+                        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+                        boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null
+                    });
+                }
+            }
             if (player.path.length === 0 && player.pendingInteraction) {
                 const targetInter = player.pendingInteraction;
                 player.pendingInteraction = null;
@@ -13618,7 +13641,7 @@ function render() {
     // Çok Oyunculu (Multiplayer) Diğer Oyuncuları Çiz
     if (typeof remotePlayers === 'object' && remotePlayers) {
         Object.values(remotePlayers).forEach(rp => {
-            if (rp && rp.mapId === currentMapId) {
+            if (rp && normalizeMapId(rp.mapId) === normalizeMapId(currentMapId)) {
                 renderList.push({
                     depth: rp.x + rp.y,
                     draw: () => {
@@ -13741,6 +13764,7 @@ function returnFromKrakenToDortyol() {
     player.x = 21.5;
     player.y = 7.5;
     player.path = [];
+    notifyMapChange('dortyol', 21.5, 7.5);
     if (wasLeader) {
         if (activeGuild) {
             activeGuild.krakenActive = false;
@@ -13961,8 +13985,10 @@ function applyLoadedCharacter(c) {
         player.guildName = c.guildName;
         SafeStorage.setItem('mmo_player_guild', c.guildName);
     }
-    if (c.x && c.y && c.mapId) {
-        currentMapId = c.mapId;
+    if (c.mapId) {
+        currentMapId = normalizeMapId(c.mapId);
+    }
+    if (c.x !== undefined && c.y !== undefined) {
         player.x = Number(c.x);
         player.y = Number(c.y);
     }
@@ -14015,53 +14041,84 @@ window.addEventListener('beforeunload', saveCharacterToServer);
 // ============================================================================
 // ÇOK OYUNCULU AĞ (SOCKET.IO) BAĞLANTISI
 // ============================================================================
+function sendPlayerJoin() {
+    if (!socket || !socket.connected) return;
+    const charName = player.name || (currentUser ? currentUser.username : '');
+    if (!charName) return;
+    const cleanMap = normalizeMapId(currentMapId);
+    socket.emit('player_join', {
+        token: authToken,
+        charName: charName,
+        x: Number(player.x.toFixed(2)),
+        y: Number(player.y.toFixed(2)),
+        mapId: cleanMap,
+        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+        boatId: (cleanMap === 'akdeniz' || cleanMap === 'kraken') ? player.activeBoatId : null,
+        level: player.level || 1,
+        guildName: player.guildName || ''
+    });
+    console.log(`📡 [Multiplayer] player_join gönderildi: ${charName} (${cleanMap})`);
+}
+
+function notifyMapChange(newMapId, targetX, targetY) {
+    const cleanMap = normalizeMapId(newMapId);
+    if (socket && socket.connected) {
+        socket.emit('player_change_map', {
+            newMapId: cleanMap,
+            x: Number((targetX !== undefined ? targetX : player.x).toFixed(2)),
+            y: Number((targetY !== undefined ? targetY : player.y).toFixed(2))
+        });
+    }
+}
+
 function initSocketConnection() {
     if (typeof io === 'undefined') return;
-    if (socket && socket.connected) return;
 
-    try {
+    if (socket && socket.connected) {
+        sendPlayerJoin();
+        return;
+    }
+
+    if (!socket) {
         const socketTarget = getServerApiUrl('');
-        socket = socketTarget ? io(socketTarget) : io();
+        socket = socketTarget ? io(socketTarget, { transports: ['websocket', 'polling'] }) : io({ transports: ['websocket', 'polling'] });
 
         socket.on('connect', () => {
-            socket.emit('player_join', {
-                token: authToken,
-                charName: player.name,
-                x: player.x,
-                y: player.y,
-                mapId: currentMapId,
-                costume: player.equipped.costume,
-                boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null,
-                level: player.level,
-                guildName: player.guildName
-            });
+            console.log('⚡ Socket bağlantısı kuruldu. Socket ID:', socket.id);
+            sendPlayerJoin();
         });
 
         socket.on('map_peers', (peers) => {
             remotePlayers = {};
             if (Array.isArray(peers)) {
                 peers.forEach(p => {
-                    remotePlayers[p.socketId] = p;
+                    if (p && p.socketId && p.socketId !== socket.id) {
+                        remotePlayers[p.socketId] = p;
+                    }
                 });
             }
+            console.log('👥 Haritadaki diğer oyuncular:', Object.keys(remotePlayers).length);
         });
 
         socket.on('player_joined', (p) => {
-            if (p && p.socketId) {
+            if (p && p.socketId && p.socketId !== socket.id) {
                 remotePlayers[p.socketId] = p;
+                showToast(`👋 [${p.name}] haritaya geldi!`, '#80ed99');
                 addChatMessage('Sistem', `[${p.name}] haritaya geldi.`, 'system');
             }
         });
 
         socket.on('player_moved', (data) => {
-            if (remotePlayers[data.socketId]) {
+            if (data && data.socketId && remotePlayers[data.socketId]) {
                 Object.assign(remotePlayers[data.socketId], data);
             }
         });
 
         socket.on('player_left', (socketId) => {
             if (remotePlayers[socketId]) {
+                const leavingName = remotePlayers[socketId].name || 'Bir oyuncu';
                 delete remotePlayers[socketId];
+                showToast(`🚶 ${leavingName} haritadan ayrıldı.`, '#ffd166');
             }
         });
 
@@ -14081,8 +14138,8 @@ function initSocketConnection() {
                 statusEl.textContent = `Sunucu: 🟢 Çevrimiçi (${count} Oyuncu)`;
             }
         });
-    } catch (e) {
-        console.warn('Socket başlatma hatası:', e);
+    } else if (!socket.connected) {
+        socket.connect();
     }
 }
 
@@ -14106,6 +14163,11 @@ function openAuthGateway() {
     const modal = document.getElementById('auth-gateway-modal');
     if (modal) modal.classList.remove('hidden');
     clearAuthErrors();
+    const identInput = document.getElementById('auth-login-ident');
+    const lastUser = SafeStorage.getItem('mmo_last_username');
+    if (identInput && !identInput.value && lastUser) {
+        identInput.value = lastUser;
+    }
 }
 
 function closeAuthGateway() {
@@ -14234,10 +14296,13 @@ async function handleLoginSubmit() {
             currentUser = data.user;
             authToken = data.token;
             if (rememberChk && rememberChk.checked) {
+                SafeStorage.setItem('mmo_remember_me', 'true');
                 SafeStorage.setItem('mmo_auth_token', authToken);
             } else {
+                SafeStorage.removeItem('mmo_remember_me');
                 SafeStorage.removeItem('mmo_auth_token');
             }
+            SafeStorage.setItem('mmo_last_username', username);
 
             saveLocalAccount(currentUser.username, currentUser.email, password, currentUser.role);
             updateAdminPrivileges();
@@ -14426,17 +14491,22 @@ async function handleRegisterSubmit() {
 }
 
 function logoutUser() {
-    if (!confirm('Hesabınızdan çıkış yapmak istediğinize emin misiniz?')) return;
+    if (!confirm('Hesabınızdan çıkış yapıp başka bir hesapla giriş yapmak istiyor musunuz?')) return;
     saveCharacterToServer();
     authToken = null;
     currentUser = null;
+    player.name = '';
     SafeStorage.removeItem('mmo_auth_token');
+    SafeStorage.removeItem('mmo_remember_me');
+    SafeStorage.removeItem('mmo_character_name');
     updateAdminPrivileges();
     if (socket) {
         try { socket.disconnect(); } catch (e) {}
+        socket = null;
     }
+    remotePlayers = {};
     openAuthGateway();
-    showToast('Çıkış yapıldı. Tekrar görüşmek üzere!', '#ffd166');
+    showToast('🚪 Çıkış yapıldı. Yeni veya farklı bir hesapla giriş yapabilirsiniz!', '#ffd166');
 }
 
 function initAuthGatewaySystem() {
@@ -14560,26 +14630,18 @@ function initAuthGatewaySystem() {
         };
     }
 
-    // Sunucu durumunu kontrol et ve varsa oturumu devam ettir
+    // Sunucu durumunu kontrol et ve oturumu başlat
     checkServerStatus().then(online => {
-        if (online) {
+        const rememberMe = (SafeStorage.getItem('mmo_remember_me') === 'true');
+        if (online && rememberMe && authToken) {
             tryAutoLogin().then(loggedIn => {
                 if (!loggedIn) {
                     openAuthGateway();
                 }
             });
         } else {
-            // Sunucu yoksa veya yerel moddaysa
-            const savedName = SafeStorage.getItem('mmo_character_name');
-            if (savedName) {
-                player.name = savedName;
-                const isLocalAdmin = (savedName.toLowerCase() === 'burak' || savedName.toLowerCase() === 'admin');
-                currentUser = { id: 1, username: savedName, email: 'local@mmo.local', role: isLocalAdmin ? 'admin' : 'player' };
-                updateAdminPrivileges();
-                closeAuthGateway();
-            } else {
-                openAuthGateway();
-            }
+            // Eğer Beni Hatırla seçilmediyse veya yerel moddaysa her zaman giriş ekranını aç!
+            openAuthGateway();
         }
     });
 }
