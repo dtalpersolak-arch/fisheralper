@@ -14186,10 +14186,12 @@ async function checkServerStatus() {
         if (res.ok) {
             let data = null;
             try { data = await res.json(); } catch (e) {}
-            if (data && data.online) {
+            const isOnline = data ? (data.online === true || data.status === 'online' || data.onlinePlayers !== undefined) : true;
+            if (isOnline) {
                 serverOnline = true;
                 if (dot) dot.className = 'auth-status-dot online';
-                if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${data.onlinePlayers || 0} Oyuncu Aktif)`;
+                const count = (data && data.onlinePlayers !== undefined) ? data.onlinePlayers : 0;
+                if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${count} Oyuncu Aktif)`;
                 return true;
             }
         }
@@ -14201,10 +14203,12 @@ async function checkServerStatus() {
                 if (res2.ok) {
                     let data2 = null;
                     try { data2 = await res2.json(); } catch (e2) {}
-                    if (data2 && data2.online) {
+                    const isOnline2 = data2 ? (data2.online === true || data2.status === 'online' || data2.onlinePlayers !== undefined) : true;
+                    if (isOnline2) {
                         serverOnline = true;
                         if (dot) dot.className = 'auth-status-dot online';
-                        if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${data2.onlinePlayers || 0} Oyuncu Aktif)`;
+                        const count2 = (data2 && data2.onlinePlayers !== undefined) ? data2.onlinePlayers : 0;
+                        if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${count2} Oyuncu Aktif)`;
                         return true;
                     }
                 }
@@ -14267,6 +14271,10 @@ async function handleLoginSubmit() {
     if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.style.opacity = '0.6';
+    }
+
+    if (!serverOnline) {
+        await checkServerStatus();
     }
 
     if (serverOnline) {
@@ -14424,6 +14432,10 @@ async function handleRegisterSubmit() {
     if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.style.opacity = '0.6';
+    }
+
+    if (!serverOnline) {
+        await checkServerStatus();
     }
 
     if (serverOnline) {

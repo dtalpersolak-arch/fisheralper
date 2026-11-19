@@ -567,6 +567,7 @@ app.get('/api/market', async (req, res) => {
 // 7. SUNUCU DURUMU (Ping / Health)
 app.get('/api/status', (req, res) => {
     res.json({
+        online: true,
         status: 'online',
         game: 'Burnaz Sahil & Dörtyol MMO',
         version: '2.0.0',
