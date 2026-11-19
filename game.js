@@ -14333,39 +14333,12 @@ async function handleLoginSubmit() {
             return;
         } catch (err) {
             console.warn('Giriş sunucu isteği başarısız oldu:', err);
-            // Sunucuya ulaşılamadıysa yerel hesap eşleşmesi var mı kontrol et
-            const localAcc = findLocalAccount(username);
-            if (localAcc) {
-                if (localAcc.password && localAcc.password !== password) {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.style.opacity = '1';
-                    }
-                    showAuthError(errBox, 'Şifre hatalı! (Yerel hesap eşleşmesi)');
-                    return;
-                }
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.style.opacity = '1';
-                }
-                currentUser = { id: 1, username: localAcc.username, email: localAcc.email, role: localAcc.role };
-                updateAdminPrivileges();
-                const savedName = SafeStorage.getItem('mmo_character_name');
-                closeAuthGateway();
-                if (savedName) {
-                    player.name = savedName;
-                    showToast(`⚡ Sunucu çevrimdışı. Yerel hesapla devam ediliyor (${player.name})!`, '#ffd166');
-                } else {
-                    openCharacterCreation();
-                }
-                return;
-            }
-
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.style.opacity = '1';
             }
-            showAuthError(errBox, 'Sunucuya bağlanılamadı. Node.js sunucusunun açık olduğundan veya internet bağlantınızdan emin olun. Dilerseniz hemen alttaki "Çevrimdışı / Yerel Oyna" butonuna tıklayarak oyuna başlayabilirsiniz.');
+            const errMsg = err && err.message ? err.message : 'Bağlantı hatası';
+            showAuthError(errBox, `Sunucuya bağlanılamadı (${errMsg}). Node.js / Railway sunucusunun açık olduğundan emin olun. İsterseniz aşağıdaki "⚡ Çevrimdışı / Yerel Oyna" butonuna tıklayarak bağımsız oynayabilirsiniz.`);
             return;
         }
     } else {
@@ -14479,18 +14452,13 @@ async function handleRegisterSubmit() {
             openCharacterCreation();
             return;
         } catch (err) {
-            console.warn('Sunucuya kayıt isteği başarısız oldu, yerel kayıt deneniyor:', err);
+            console.warn('Sunucuya kayıt isteği başarısız oldu:', err);
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.style.opacity = '1';
             }
-            const isLocalAdmin = (username.toLowerCase() === 'burak' || username.toLowerCase() === 'admin');
-            currentUser = { id: 1, username, email, role: isLocalAdmin ? 'admin' : 'player' };
-            saveLocalAccount(username, email, password, currentUser.role);
-            updateAdminPrivileges();
-            closeAuthGateway();
-            openCharacterCreation();
-            showToast('⚡ Sunucu çevrimdışı: Hesabınız yerel olarak oluşturuldu!', '#ffd166');
+            const errMsg = err && err.message ? err.message : 'Bağlantı hatası';
+            showAuthError(errBox, `Canlı sunucuya bağlanılamadı (${errMsg}). Lütfen internetinizi veya Railway sunucusunu kontrol edin.`);
             return;
         }
     } else {
