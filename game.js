@@ -15177,7 +15177,7 @@ async function checkServerStatus() {
     const txt = document.getElementById('auth-status-text');
 
     const tryUrl = getServerApiUrl('/api/status');
-    const fetchWithTimeout = async (url, ms = 3500) => {
+    const fetchWithTimeout = async (url, ms = 1800) => {
         try {
             if (typeof AbortController !== 'undefined') {
                 const controller = new AbortController();
@@ -15199,7 +15199,7 @@ async function checkServerStatus() {
     };
 
     try {
-        const res = await fetchWithTimeout(tryUrl, 3500);
+        const res = await fetchWithTimeout(tryUrl, 1800);
         if (res && res.ok) {
             let data = null;
             try { data = await res.json(); } catch (e) {}
@@ -15214,10 +15214,10 @@ async function checkServerStatus() {
         }
     } catch (e) {}
 
-    // Fallback: Yerel geliştirme portu (3000) açıksa orayı dene
+    // Fallback: Yerel geliştirme portu (3000) açıksa orayı hızlıca dene
     if (!tryUrl.includes('localhost:3000')) {
         try {
-            const localRes = await fetchWithTimeout('http://localhost:3000/api/status', 1200);
+            const localRes = await fetchWithTimeout('http://localhost:3000/api/status', 800);
             if (localRes && localRes.ok) {
                 let data = null;
                 try { data = await localRes.json(); } catch (e) {}
