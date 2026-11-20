@@ -374,21 +374,21 @@
                     <div class="auth-subtitle">Efsanevi balıkçılık ve lonca dünyasına katılmak için giriş yap veya yeni hesap oluştur.</div>
                     
                     <div class="auth-server-indicator">
-                        <span class="auth-status-dot offline" id="auth-status-dot"></span>
-                        <span id="auth-status-text">Sunucu Durumu: ⚡ Yerel / Çevrimdışı Mod</span>
-                        <button type="button" id="auth-server-settings-btn" class="auth-server-settings-btn" onclick="document.getElementById('auth-server-config-row').classList.toggle('hidden');" title="Sunucu Adresi Değiştir (Railway / Localhost)">⚙️</button>
+                        <span class="auth-status-dot" id="auth-status-dot"></span>
+                        <span id="auth-status-text">Sunucu Durumu: Bağlantı Kontrol Ediliyor...</span>
+                        <button type="button" id="auth-server-settings-btn" class="auth-server-settings-btn" title="Sunucu Adresi Değiştir (Railway / Localhost)">⚙️</button>
                     </div>
                     <div id="auth-server-config-row" class="auth-server-config-row hidden">
                         <input type="text" id="auth-custom-server-input" placeholder="Sunucu URL: örn. https://mmo.up.railway.app veya boş bırak" />
-                        <button type="button" id="auth-save-server-btn" class="auth-sm-btn" onclick="saveCustomServer()">Kaydet</button>
-                        <button type="button" id="auth-reset-server-btn" class="auth-sm-btn secondary" onclick="resetCustomServer()">Sıfırla</button>
+                        <button type="button" id="auth-save-server-btn" class="auth-sm-btn">Kaydet</button>
+                        <button type="button" id="auth-reset-server-btn" class="auth-sm-btn secondary">Sıfırla</button>
                     </div>
                 </div>
 
                 <!-- Giriş / Kayıt Sekmeleri -->
                 <div class="auth-tabs">
-                    <button type="button" class="auth-tab active" id="auth-tab-btn-login" onclick="document.getElementById('auth-register-form').classList.add('hidden'); document.getElementById('auth-login-form').classList.remove('hidden'); this.classList.add('active'); document.getElementById('auth-tab-btn-register').classList.remove('active');">🔑 Giriş Yap</button>
-                    <button type="button" class="auth-tab" id="auth-tab-btn-register" onclick="document.getElementById('auth-login-form').classList.add('hidden'); document.getElementById('auth-register-form').classList.remove('hidden'); this.classList.add('active'); document.getElementById('auth-tab-btn-login').classList.remove('active');">📝 Kayıt Ol</button>
+                    <button class="auth-tab active" id="auth-tab-btn-login">🔑 Giriş Yap</button>
+                    <button class="auth-tab" id="auth-tab-btn-register">📝 Kayıt Ol</button>
                 </div>
 
                 <!-- GİRİŞ FORMU -->
@@ -418,12 +418,12 @@
 
                     <div id="auth-login-error" class="auth-error-msg hidden"></div>
 
-                    <button type="button" id="auth-btn-login" class="action-btn primary auth-submit-btn" onclick="if(typeof handleLoginSubmit==='function'){handleLoginSubmit();}else{var n=(document.getElementById('auth-login-ident').value||'').trim()||'Balıkçı'; try{localStorage.setItem('mmo_character_name',n);}catch(e){} document.getElementById('auth-gateway-modal').classList.add('hidden'); if(window.player) window.player.name=n;}">
+                    <button id="auth-btn-login" class="action-btn primary auth-submit-btn">
                         <span>🚀 Giriş Yap ve Dünyaya Bağlan</span>
                     </button>
 
                     <div class="auth-fallback-row">
-                        <button type="button" id="auth-btn-offline" class="auth-offline-btn" onclick="var n=(document.getElementById('auth-login-ident').value||'').trim()||'Balıkçı'; try{localStorage.setItem('mmo_character_name',n);}catch(e){} document.getElementById('auth-gateway-modal').classList.add('hidden'); if(window.player) window.player.name=n;" title="Sunucu olmadan doğrudan tarayıcıda oyna">
+                        <button type="button" id="auth-btn-offline" class="auth-offline-btn" title="Sunucu olmadan doğrudan tarayıcıda oyna">
                             ⚡ Çevrimdışı / Yerel Oyna
                         </button>
                     </div>
@@ -465,7 +465,7 @@
 
                     <div id="auth-reg-error" class="auth-error-msg hidden"></div>
 
-                    <button type="button" id="auth-btn-register" class="action-btn success auth-submit-btn" onclick="if(typeof handleRegisterSubmit==='function'){handleRegisterSubmit();}else{var u=(document.getElementById('auth-reg-user').value||'').trim()||'Balıkçı'; try{localStorage.setItem('mmo_character_name',u);}catch(e){} document.getElementById('auth-gateway-modal').classList.add('hidden'); if(window.player) window.player.name=u;}">
+                    <button id="auth-btn-register" class="action-btn success auth-submit-btn">
                         <span>✨ Hesap Oluştur ve Giriş Yap</span>
                     </button>
                 </div>
@@ -475,86 +475,6 @@
                 </div>
             </div>
         </div>
-        <script>
-            // Arayüz butonları için anında çalışan güvenli işleyiciler
-            function switchAuthTab(tab) {
-                var tabLogin = document.getElementById('auth-tab-btn-login');
-                var tabReg = document.getElementById('auth-tab-btn-register');
-                var formLogin = document.getElementById('auth-login-form');
-                var formReg = document.getElementById('auth-register-form');
-                if (tab === 'login') {
-                    if (tabLogin) tabLogin.classList.add('active');
-                    if (tabReg) tabReg.classList.remove('active');
-                    if (formLogin) formLogin.classList.remove('hidden');
-                    if (formReg) formReg.classList.add('hidden');
-                } else {
-                    if (tabReg) tabReg.classList.add('active');
-                    if (tabLogin) tabLogin.classList.remove('active');
-                    if (formReg) formReg.classList.remove('hidden');
-                    if (formLogin) formLogin.classList.add('hidden');
-                }
-            }
-            function toggleServerSettings() {
-                var row = document.getElementById('auth-server-config-row');
-                if (row) row.classList.toggle('hidden');
-            }
-            function saveCustomServer() {
-                var input = document.getElementById('auth-custom-server-input');
-                var val = input ? input.value.trim() : '';
-                if (val) {
-                    try { localStorage.setItem('mmo_server_url', val); } catch(e){}
-                    alert('Sunucu adresi kaydedildi: ' + val);
-                } else {
-                    try { localStorage.removeItem('mmo_server_url'); } catch(e){}
-                    alert('Otomatik sunucu moduna geçildi.');
-                }
-                var row = document.getElementById('auth-server-config-row');
-                if (row) row.classList.add('hidden');
-                if (typeof checkServerStatus === 'function') checkServerStatus();
-            }
-            function resetCustomServer() {
-                try { localStorage.removeItem('mmo_server_url'); } catch(e){}
-                var input = document.getElementById('auth-custom-server-input');
-                if (input) input.value = '';
-                var row = document.getElementById('auth-server-config-row');
-                if (row) row.classList.add('hidden');
-                alert('Varsayılan sunucu adresine dönüldü.');
-                if (typeof checkServerStatus === 'function') checkServerStatus();
-            }
-            function handleOfflinePlay() {
-                var ident = document.getElementById('auth-login-ident');
-                var name = (ident && ident.value ? ident.value.trim() : '') || 'Balıkçı';
-                try { localStorage.setItem('mmo_character_name', name); } catch(e){}
-                var modal = document.getElementById('auth-gateway-modal');
-                if (modal) modal.classList.add('hidden');
-                if (typeof player !== 'undefined') {
-                    player.name = name;
-                    if (typeof updateExpHUD === 'function') updateExpHUD();
-                    if (typeof showToast === 'function') showToast('⚡ Çevrimdışı Mod devrede: ' + name, '#ffd166');
-                } else {
-                    var charModal = document.getElementById('char-create-modal');
-                    if (charModal) charModal.classList.remove('hidden');
-                }
-            }
-            function submitCharacterCreation() {
-                var input = document.getElementById('char-name-input');
-                var raw = (input ? input.value : '').trim() || 'Balıkçı';
-                if (raw.length < 2) {
-                    var errText = document.getElementById('char-name-error');
-                    if (errText) errText.classList.remove('hidden');
-                    return;
-                }
-                try { localStorage.setItem('mmo_character_name', raw); } catch(e){}
-                var modal = document.getElementById('char-create-modal');
-                if (modal) modal.classList.add('hidden');
-                if (typeof player !== 'undefined') {
-                    player.name = raw;
-                    if (typeof updateExpHUD === 'function') updateExpHUD();
-                    if (typeof showToast === 'function') showToast('🌟 Hoş geldin, ' + raw + '! Dünyaya adım attın.', '#80ed99');
-                    if (typeof saveCharacterToServer === 'function') saveCharacterToServer();
-                }
-            }
-        </script>
 
         <!-- KARAKTER OLUŞTURMA & GİRİŞ MODALI (İLK EKRAN) -->
         <div id="char-create-modal" class="modal-backdrop hidden">
@@ -573,7 +493,7 @@
                         <label class="char-input-label" for="char-name-input">Karakter Adı</label>
                         <div class="char-input-wrap">
                             <span class="char-input-icon">👤</span>
-                            <input type="text" id="char-name-input" maxlength="16" placeholder="Karakter adını gir..." autocomplete="off" onkeydown="if(event.key==='Enter'){if(typeof submitCharacterCreation==='function')submitCharacterCreation();}">
+                            <input type="text" id="char-name-input" maxlength="16" placeholder="Karakter adını gir..." autocomplete="off">
                         </div>
                         <div id="char-name-error" class="char-error-text hidden">Lütfen 2 ile 16 karakter arasında bir isim girin!</div>
                         <div class="char-input-tip">💡 Karakter adın haritada kafanın üzerinde ve sohbette görünecektir.</div>
@@ -581,7 +501,7 @@
                 </div>
 
                 <div class="char-create-footer">
-                    <button type="button" id="char-create-btn" class="action-btn primary char-submit-btn" onclick="if(typeof submitCharacterCreation==='function'){submitCharacterCreation();}else{var i=document.getElementById('char-name-input');var n=(i?i.value:'').trim()||'Balıkçı';try{localStorage.setItem('mmo_character_name',n);}catch(e){}document.getElementById('char-create-modal').classList.add('hidden');if(window.player)window.player.name=n;}">
+                    <button id="char-create-btn" class="action-btn primary char-submit-btn">
                         <span>⛵ Dünyaya Adım At (Oyuna Başla)</span>
                     </button>
                 </div>
@@ -596,6 +516,6 @@
             document.write('<script src="/socket.io/socket.io.js"><\/script>');
         }
     </script>
-    <script src="game.js?v=2.6.9"></script>
+    <script src="game.js"></script>
 </body>
 </html>
