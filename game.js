@@ -2730,6 +2730,9 @@ function returnFromKrakenToDortyolDueToEndOfEvent() {
         activeGuild.krakenActive = false;
         saveGuildData();
     }
+    if (socket && socket.connected) {
+        socket.emit('guild_end_kraken_raid', { guildName: (activeGuild && activeGuild.name) || player.guildName });
+    }
     showToast("⏰ Kraken Seferi Zamanı Sona Erdi! Lonca Destroyer'i ve tüm mürettebat Dörtyol Karargâhı'na tahliye edildi.", "#ef4444");
     if (typeof addChatMessage === 'function') {
         addChatMessage('Lonca', `⏰ [KRAKEN ETKİNLİĞİ BİTTİ] Sefer süresi dolduğu için Lonca Destroyer'i Dörtyol Karargâhı'na döndü! Tüm üyeler ana şehre tahliye edildi.`, 'system');
@@ -4322,7 +4325,10 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
         }
 
         if (marketOnlyMyListings) {
-            const isMine = l.isPlayerListing || (l.sellerName === player.name && l.sellerName !== 'Oyuncu');
+            const isMine = Boolean(
+                (l.sellerUserId && currentUser && currentUser.id && l.sellerUserId === currentUser.id) ||
+                (l.sellerName && player && player.name && l.sellerName.toLowerCase() === player.name.toLowerCase() && l.sellerName.toLowerCase() !== 'oyuncu')
+            );
             if (!isMine) return false;
         }
 
@@ -4417,7 +4423,10 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
         const it = ITEMS[l.itemId];
         if (!it) return;
 
-        const isMine = l.isPlayerListing || (l.sellerName === player.name && l.sellerName !== 'Oyuncu');
+        const isMine = Boolean(
+            (l.sellerUserId && currentUser && currentUser.id && l.sellerUserId === currentUser.id) ||
+            (l.sellerName && player && player.name && l.sellerName.toLowerCase() === player.name.toLowerCase() && l.sellerName.toLowerCase() !== 'oyuncu')
+        );
         const card = document.createElement('div');
         card.className = `market-listing-card ${isMine ? 'mine-card' : ''}`;
 
@@ -4763,6 +4772,7 @@ function renderMarketSellTab(tabContainer, mainContainer) {
         const newListing = {
             id: 'list_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
             sellerName: player.name || 'Oyuncu',
+            sellerUserId: (currentUser && currentUser.id) ? currentUser.id : null,
             isPlayerListing: true,
             itemId: selEntry.id,
             count: countToList,
@@ -7445,7 +7455,11 @@ function renderGuildNPCModal(container) {
                 if (lBtn) {
                     lBtn.onclick = () => {
                         activeGuild.krakenActive = true;
+                        activeGuild.hasDestroyer = true;
                         saveGuildData();
+                        if (socket && socket.connected) {
+                            socket.emit('guild_start_kraken_raid', { guildName: activeGuild.name, leaderName: player.name });
+                        }
                         currentMapId = 'kraken';
                         player.x = 13.5;
                         player.y = 13.5;
@@ -7642,6 +7656,9 @@ function renderGuildGuardModal(container) {
                     if (removeMultipleFromInventory('item_pearl', 5)) {
                         activeGuild.hasDestroyer = true;
                         saveGuildData();
+                        if (socket && socket.connected) {
+                            socket.emit('guild_buy_destroyer', { guildName: activeGuild.name });
+                        }
                         updateExpHUD();
                         renderInventoryUI();
                         showToast("🚢 TEBRİKLER! Lonca Destroyer'i satın alındı! Lonca Lideri artık Karargâhtan Kraken Seferini başlatabilir.", '#ffd166');
@@ -8013,6 +8030,34 @@ function renderGuildWindow() {
             </div>
         </div>
 
+        ${activeGuild.krakenActive ? `
+        <div style="background: linear-gradient(135deg, rgba(60, 10, 20, 0.9) 0%, rgba(20, 5, 8, 0.95) 100%); border: 1.5px solid #ef4444; border-radius: 10px; padding: 12px 16px; margin: 10px 0 14px 0; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 4px 16px rgba(220,38,38,0.4); flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:26px;">🦑</span>
+                <div>
+                    <div style="color:#ffd166; font-size:14px; font-weight:800; display:flex; align-items:center; gap:6px;">
+                        <span>KRAKEN SEFERİ AKTİF (KIZIL OKYANUS)</span>
+                        <span style="font-size:10.5px; background:#10b981; color:#000; padding:2px 7px; border-radius:4px; font-weight:800;">SEFERDE</span>
+                    </div>
+                    <div style="color:#e2e8f0; font-size:12px; margin-top:2px;">
+                        ${isLeader ? 'Lonca Destroyer\'i dümendedir. Kızıl Okyanus\'ta canavarlarla mücadele ediyorsun!' : `Lonca Lideri [${activeGuild.leader}] Kızıl Okyanus\'ta Destroyer ile seyirde! Tekneye katılıp güverteden olta atabilirsin.`}
+                    </div>
+                </div>
+            </div>
+            <div>
+                ${currentMapId === 'kraken' ? `
+                    <span style="padding:8px 14px; background:rgba(16,185,129,0.2); border:1px solid #10b981; border-radius:6px; color:#6ee7b7; font-weight:700; font-size:12px;">
+                        ⚓ Destroyer\'dasın
+                    </span>
+                ` : `
+                    <button class="primary-btn" id="guild-window-join-kraken-btn" style="padding:9px 18px; font-size:13px; font-weight:800; background:linear-gradient(135deg, #00b4d8, #0077b6); color:#fff; border:1.5px solid #00f5d4; border-radius:6px; cursor:pointer; box-shadow:0 3px 12px rgba(0,180,216,0.5);">
+                        ⚓ Destroyer\'a Işınlan (${isLeader ? 'Dümene Geç' : 'Mürettebata Katıl'})
+                    </button>
+                `}
+            </div>
+        </div>
+        ` : ''}
+
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(200, 155, 110, 0.25); padding-bottom:10px; margin-top:-4px; flex-wrap:wrap; gap:8px;">
             <div class="tab-group">
                 <button class="tab-btn ${activeGuildTab === 'skills' ? 'active' : ''}" id="tab-g-skills" style="padding:8px 16px; font-weight:700;">
@@ -8134,6 +8179,21 @@ function renderGuildWindow() {
         tabApps.onclick = () => {
             activeGuildTab = 'apps';
             renderGuildWindow();
+        };
+    }
+
+    const gwJoinKrakenBtn = document.getElementById('guild-window-join-kraken-btn');
+    if (gwJoinKrakenBtn) {
+        gwJoinKrakenBtn.onclick = () => {
+            currentMapId = 'kraken';
+            player.x = 13.5;
+            player.y = 13.5;
+            player.path = [];
+            notifyMapChange('kraken', 13.5, 13.5);
+            const gModal = document.getElementById('guild-modal');
+            if (gModal) gModal.classList.add('hidden');
+            showToast("⚓ Lonca Destroyer'ine katıldın! Kızıl Okyanus'tasın.", '#4cc9f0');
+            addChatMessage('Lonca', `[${player.name}] Lonca Destroyer'ine katıldı.`, 'system');
         };
     }
 
@@ -10688,6 +10748,9 @@ function renderAdminGMTab(container) {
                 activeGuild.hasDestroyer = true;
                 activeGuild.krakenActive = true;
                 saveGuildData();
+                if (socket && socket.connected) {
+                    socket.emit('guild_start_kraken_raid', { guildName: activeGuild.name, leaderName: player.name });
+                }
             }
             if (!isKrakenEventActive()) {
                 KRAKEN_EVENT_CONFIG.forceOpen = true;
@@ -10788,6 +10851,9 @@ function renderAdminGMTab(container) {
         gToggleDestBtn.onclick = () => {
             activeGuild.hasDestroyer = !activeGuild.hasDestroyer;
             saveGuildData();
+            if (socket && socket.connected && activeGuild.hasDestroyer) {
+                socket.emit('guild_buy_destroyer', { guildName: activeGuild.name });
+            }
             renderAdminGMTab(container);
             showToast(`🚢 Lonca Destroyer'i: ${activeGuild.hasDestroyer ? 'AÇILDI' : 'KAPATILDI'}`, '#ffd166');
         };
@@ -11089,32 +11155,33 @@ function drawGuildDestroyerWithCrew(g, x, y, bY) {
 }
 
 function drawDestroyerCrew(g, shipX, bY, isLeader) {
-    const rawMembers = (activeGuild && activeGuild.members) ? activeGuild.members : [];
     const leaderName = (activeGuild && activeGuild.leader) ? activeGuild.leader : (player.name || 'Lider');
+    const myGuildName = (activeGuild && activeGuild.name) || player.guildName || '';
 
-    // Mürettebat Üyeleri
-    const dummyCrew = [
-        { name: 'Kuzeyli Balıkçı', role: 'Subay', coatColor: '#3a86ff', hatColor: '#1d3557' },
-        { name: 'Fırtına Reis', role: 'Kıdemli', coatColor: '#e07a5f', hatColor: '#3d405b' },
-        { name: 'Deniz Gözcüsü Ege', role: 'Üye', coatColor: '#2ec4b6', hatColor: '#0b525b' },
-        { name: 'Gümüşkanca', role: 'Çırak', coatColor: '#9d4edd', hatColor: '#3c096c' }
-    ];
+    // Sadece Kraken haritasında bağlı ve aynı loncada olan gerçek çevrimiçi oyuncuları al!
+    const krakenRemoteMembers = Object.values(remotePlayers || {}).filter(rp => {
+        if (!rp || normalizeMapId(rp.mapId) !== 'kraken') return false;
+        if (!myGuildName || !rp.guildName) return false;
+        return rp.guildName.toLowerCase() === myGuildName.toLowerCase();
+    });
 
-    const actualCrew = rawMembers.filter(m => !m.isPlayer && m.role !== 'Lider');
-    const displayCrew = actualCrew.length > 0 ? actualCrew : dummyCrew;
+    // Lider Kraken haritasında bağlı mı?
+    const leaderInKraken = krakenRemoteMembers.find(rp => rp.name && leaderName && rp.name.toLowerCase() === leaderName.toLowerCase());
 
     // A. DÜMENCİ (LONCA LİDERİ)
-    // Eğer oyuncu liderse oyuncu bizzat dümendedir, değilse Lider NPC dümende durur
-    if (!isLeader) {
-        const hX = shipX - 48;
-        const hY = bY - 16;
-        drawCrewMemberSprite(g, hX, hY, '#ffb703', '#fb8500', `👑 ${leaderName} [Lider]`, false, true);
-    } else {
-        // Oyuncu dümende, üstünde kral tacı rozeti
+    if (isLeader) {
+        // Yerel oyuncu bizzat lider ve dümende
         g.font = 'bold 10px "Segoe UI", sans-serif';
         g.fillStyle = '#ffd166';
         g.textAlign = 'center';
         g.fillText('👑 DÜMENDESİN (LİDER)', shipX - 48, bY - 32);
+    } else {
+        // Yerel oyuncu lider değil; eğer lider gerçekten Kraken haritasındaysa dümende çiz
+        if (leaderInKraken) {
+            const hX = shipX - 48;
+            const hY = bY - 16;
+            drawCrewMemberSprite(g, hX, hY, '#ffb703', '#fb8500', `👑 ${leaderInKraken.name} [Lider]`, false, true);
+        }
     }
 
     // B. GÜVERTEDEKİ BALIK TUTAN ÜYELER
@@ -11125,28 +11192,43 @@ function drawDestroyerCrew(g, shipX, bY, isLeader) {
         { dx: 52, dy: -4, rodAngle: -0.35, rodLen: 26 }
     ];
 
-    // Eğer oyuncu lider değilse, 0. slotta oyuncunun kendi olta atışı vardır, diğer slotlarda NPC'ler
-    const startIndex = isLeader ? 0 : 1;
-    for (let i = 0; i < deckSlots.length; i++) {
-        const slot = deckSlots[i];
-        const mX = shipX + slot.dx;
-        const mY = bY + slot.dy;
-
-        if (!isLeader && i === 0) {
-            // Oyuncunun bulunduğu güverte noktası rozeti
-            g.font = 'bold 10px "Segoe UI", sans-serif';
-            g.fillStyle = '#4cc9f0';
-            g.textAlign = 'center';
-            g.fillText('⚓ SEN (GÜVERTE)', mX, mY - 26);
-            continue;
+    if (isLeader) {
+        // Lider ekranı: Güverte slotlarına yalnızca Kraken'e gelmiş lonca üyelerini yerleştir
+        for (let i = 0; i < deckSlots.length; i++) {
+            if (i >= krakenRemoteMembers.length) break; // Başka üye yoksa slot boş kalır
+            const member = krakenRemoteMembers[i];
+            const slot = deckSlots[i];
+            const mX = shipX + slot.dx;
+            const mY = bY + slot.dy;
+            const cColor = '#3a86ff';
+            const hColor = '#1d3557';
+            const label = `${member.name} [Üye]`;
+            drawCrewMemberSprite(g, mX, mY, cColor, hColor, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
         }
+    } else {
+        // Üye ekranı: Slot 0'da yerel üyenin kendisi vardır
+        const slot0 = deckSlots[0];
+        const mX0 = shipX + slot0.dx;
+        const mY0 = bY + slot0.dy;
+        g.font = 'bold 10px "Segoe UI", sans-serif';
+        g.fillStyle = '#4cc9f0';
+        g.textAlign = 'center';
+        g.fillText('⚓ SEN (GÜVERTE)', mX0, mY0 - 26);
 
-        const crewMember = displayCrew[(i - startIndex + displayCrew.length) % displayCrew.length];
-        const cColor = crewMember.coatColor || '#3a86ff';
-        const hColor = crewMember.hatColor || '#1d3557';
-        const label = `${crewMember.name} [${crewMember.role || 'Üye'}]`;
-
-        drawCrewMemberSprite(g, mX, mY, cColor, hColor, label, true, false, slot.rodAngle, slot.rodLen, i);
+        // Lider haricindeki diğer Kraken'deki lonca üyeleri
+        const otherKrakenMembers = krakenRemoteMembers.filter(rp => !leaderInKraken || rp.socketId !== leaderInKraken.socketId);
+        for (let i = 1; i < deckSlots.length; i++) {
+            const memberIdx = i - 1;
+            if (memberIdx >= otherKrakenMembers.length) break; // Başka üye yoksa slot boş kalır
+            const member = otherKrakenMembers[memberIdx];
+            const slot = deckSlots[i];
+            const mX = shipX + slot.dx;
+            const mY = bY + slot.dy;
+            const cColor = '#3a86ff';
+            const hColor = '#1d3557';
+            const label = `${member.name} [Üye]`;
+            drawCrewMemberSprite(g, mX, mY, cColor, hColor, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
+        }
     }
 }
 
@@ -13498,6 +13580,22 @@ function update(dt) {
         if (!isKrakenEventActive()) {
             returnFromKrakenToDortyolDueToEndOfEvent();
         }
+
+        // Kraken Haritasında Lonca Üyeleri Destroyer Dümenindeki Lider ile Birlikte Seyreder
+        if (!isPlayerGuildLeader()) {
+            const leaderName = (activeGuild && activeGuild.leader) || '';
+            const leaderRemote = Object.values(remotePlayers || {}).find(rp => rp && normalizeMapId(rp.mapId) === 'kraken' && rp.name && leaderName && rp.name.toLowerCase() === leaderName.toLowerCase());
+            if (leaderRemote) {
+                const lDist = Math.hypot(player.x - leaderRemote.x, player.y - leaderRemote.y);
+                if (lDist > 0.05) {
+                    player.x = leaderRemote.x;
+                    player.y = leaderRemote.y;
+                    player.dirX = leaderRemote.dirX || 1;
+                    player.dirY = leaderRemote.dirY || 0;
+                    player.path = [];
+                }
+            }
+        }
     }
 
     // Oyuncu Hareketi (Akdeniz'de tekne hızına göre, karada normal yürüyüş hızına göre)
@@ -13866,6 +13964,10 @@ function render() {
     if (typeof remotePlayers === 'object' && remotePlayers) {
         Object.values(remotePlayers).forEach(rp => {
             if (rp && normalizeMapId(rp.mapId) === normalizeMapId(currentMapId)) {
+                // Kraken haritasında aynı loncadaki oyuncular Destroyer üzerinde çizildiği için ayrı karakter olarak denize çizilmesin
+                const isSameGuildInKraken = (currentMapId === 'kraken' && rp.guildName && player.guildName && rp.guildName.toLowerCase() === player.guildName.toLowerCase());
+                if (isSameGuildInKraken) return;
+
                 renderList.push({
                     depth: rp.x + rp.y,
                     draw: () => {
@@ -13993,6 +14095,9 @@ function returnFromKrakenToDortyol() {
         if (activeGuild) {
             activeGuild.krakenActive = false;
             saveGuildData();
+        }
+        if (socket && socket.connected) {
+            socket.emit('guild_end_kraken_raid', { guildName: (activeGuild && activeGuild.name) || player.guildName });
         }
         showToast("🏰 Lonca Lideri olarak Dörtyol Karargâhı'na döndün. Kraken seferi tamamlandı.", '#80ed99');
         if (typeof addChatMessage === 'function') {
@@ -14448,12 +14553,68 @@ function initSocketConnection() {
         });
 
         socket.on('guild_data_updated', (guild) => {
-            if (activeGuild && activeGuild.name === guild.name) {
+            if (!guild) return;
+            const currentName = (activeGuild && activeGuild.name) || player.guildName || '';
+            if (currentName && guild.name && currentName.toLowerCase() === guild.name.toLowerCase()) {
                 activeGuild = guild;
                 saveGuildData();
                 const gModal = document.getElementById('guild-modal');
                 if (gModal && !gModal.classList.contains('hidden')) {
                     renderGuildWindow();
+                }
+                const npcModal = document.getElementById('npc-modal');
+                if (npcModal && !npcModal.classList.contains('hidden')) {
+                    const cont = document.getElementById('npc-dialogue-content');
+                    if (cont) renderGuildGuardModal(cont);
+                }
+            }
+        });
+
+        socket.on('guild_kraken_raid_started', (data) => {
+            const currentName = (activeGuild && activeGuild.name) || player.guildName || '';
+            if (currentName && data.guildName && currentName.toLowerCase() === data.guildName.toLowerCase()) {
+                if (activeGuild) {
+                    activeGuild.krakenActive = true;
+                    activeGuild.hasDestroyer = true;
+                    saveGuildData();
+                }
+                showToast(`🚨 Lider [${data.leaderName || 'Lonca Lideri'}] Lonca Destroyer'i ile Kraken Seferini başlattı! [G] tuşundan hemen tekneye ışınlanabilirsin!`, '#00f5d4', 8000);
+                addChatMessage('Lonca', `🚨 Lonca Lideri [${data.leaderName || 'Lonca Lideri'}] Lonca Destroyer'i ile Kızıl Okyanus Kraken seferini başlattı! [G] tuşundan veya Dörtyol Lonca Muhafızından tekneye katılabilirsiniz!`, 'system');
+                const gModal = document.getElementById('guild-modal');
+                if (gModal && !gModal.classList.contains('hidden')) {
+                    renderGuildWindow();
+                }
+                const npcModal = document.getElementById('npc-modal');
+                if (npcModal && !npcModal.classList.contains('hidden')) {
+                    const cont = document.getElementById('npc-dialogue-content');
+                    if (cont) renderGuildGuardModal(cont);
+                }
+            }
+        });
+
+        socket.on('guild_kraken_raid_ended', (data) => {
+            const currentName = (activeGuild && activeGuild.name) || player.guildName || '';
+            if (currentName && data.guildName && currentName.toLowerCase() === data.guildName.toLowerCase()) {
+                if (activeGuild) {
+                    activeGuild.krakenActive = false;
+                    saveGuildData();
+                }
+                if (currentMapId === 'kraken') {
+                    showToast("⏰ Kraken Seferi tamamlandı. Dörtyol Karargâhı'na dönüldü.", '#ffd166');
+                    currentMapId = 'dortyol';
+                    player.x = 21.5;
+                    player.y = 7.5;
+                    player.path = [];
+                    notifyMapChange('dortyol', 21.5, 7.5);
+                }
+                const gModal = document.getElementById('guild-modal');
+                if (gModal && !gModal.classList.contains('hidden')) {
+                    renderGuildWindow();
+                }
+                const npcModal = document.getElementById('npc-modal');
+                if (npcModal && !npcModal.classList.contains('hidden')) {
+                    const cont = document.getElementById('npc-dialogue-content');
+                    if (cont) renderGuildGuardModal(cont);
                 }
             }
         });

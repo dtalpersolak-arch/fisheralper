@@ -795,6 +795,13 @@ io.on('connection', (socket) => {
 
         // Genel çevrimiçi sayısını güncelle
         io.emit('online_count', Object.keys(onlinePlayers).length);
+
+        // Oyuncunun loncası varsa, sunucudaki en güncel lonca verisini gönder (Destroyer & Kraken senkronizasyonu)
+        if (guildName) {
+            DB.getGuild(guildName).then(g => {
+                if (g) socket.emit('guild_data_updated', g);
+            }).catch(() => {});
+        }
     });
 
     // 2. Oyuncu Hareketi (Anlık Pozisyon & Yön Güncellemesi)
@@ -853,6 +860,10 @@ io.on('connection', (socket) => {
     socket.on('market_add_listing', async (listing) => {
         if (!listing || !listing.id) return;
         listing.isPlayerListing = true;
+        const p = onlinePlayers[socket.id];
+        if (p && !listing.sellerUserId && p.userId) {
+            listing.sellerUserId = p.userId;
+        }
         await DB.addMarketListing(listing);
         io.emit('market_listing_added', listing);
     });
@@ -1050,6 +1061,57 @@ io.on('connection', (socket) => {
                 socketId: socket.id,
                 guildName: ''
             });
+        }
+    });
+
+    socket.on('guild_buy_destroyer', async (data) => {
+        const { guildName } = data || {};
+        if (!guildName) return;
+        const guild = await DB.getGuild(guildName);
+        if (guild) {
+            guild.hasDestroyer = true;
+            await DB.saveGuild(guildName, guild);
+            for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                    io.to(sId).emit('guild_data_updated', guild);
+                }
+            }
+        }
+    });
+
+    socket.on('guild_start_kraken_raid', async (data) => {
+        const { guildName, leaderName } = data || {};
+        if (!guildName) return;
+        const guild = await DB.getGuild(guildName);
+        if (guild) {
+            guild.krakenActive = true;
+            guild.hasDestroyer = true;
+            await DB.saveGuild(guildName, guild);
+        }
+        for (const [sId, pl] of Object.entries(onlinePlayers)) {
+            if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                io.to(sId).emit('guild_kraken_raid_started', {
+                    guildName,
+                    leaderName: leaderName || (guild ? guild.leader : 'Lonca Lideri')
+                });
+                if (guild) io.to(sId).emit('guild_data_updated', guild);
+            }
+        }
+    });
+
+    socket.on('guild_end_kraken_raid', async (data) => {
+        const { guildName } = data || {};
+        if (!guildName) return;
+        const guild = await DB.getGuild(guildName);
+        if (guild) {
+            guild.krakenActive = false;
+            await DB.saveGuild(guildName, guild);
+        }
+        for (const [sId, pl] of Object.entries(onlinePlayers)) {
+            if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                io.to(sId).emit('guild_kraken_raid_ended', { guildName });
+                if (guild) io.to(sId).emit('guild_data_updated', guild);
+            }
         }
     });
 
