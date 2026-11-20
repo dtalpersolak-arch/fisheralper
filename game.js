@@ -13776,6 +13776,9 @@ function drawProp(g, prop, sx, sy) {
 let buffUiTimer = 0;
 
 function update(dt) {
+    if (isNaN(dt) || dt <= 0) dt = 0.016;
+    if (isNaN(player.x) || player.x < 1 || player.x > MAP_SIZE - 2) player.x = 13.5;
+    if (isNaN(player.y) || player.y < 1 || player.y > MAP_SIZE - 2) player.y = 11.5;
     globalTime += dt;
 
     // Aktif yemek buff sürelerini güncelle
@@ -14023,13 +14026,29 @@ function update(dt) {
 }
 
 function render() {
+    if (viewWidth <= 0 || viewHeight <= 0 || canvas.width <= 0) {
+        resizeCanvas();
+    }
+
+    if (!currentMapId || !maps[currentMapId]) {
+        currentMapId = 'burnaz_sahil';
+    }
+
+    // Pozisyon koruması: Karakter harita dışına çıkmış veya NaN ise merkeze çek
+    if (isNaN(player.x) || player.x < 1 || player.x > MAP_SIZE - 2) player.x = 13.5;
+    if (isNaN(player.y) || player.y < 1 || player.y > MAP_SIZE - 2) player.y = 11.5;
+
     const m = getActiveMap();
+    if (!m || !m.grid) return;
+
     ctx.fillStyle = currentMapId === 'burnaz_sahil' ? '#0a2233' : (currentMapId === 'kraken' ? '#220408' : '#132019');
     ctx.fillRect(0, 0, viewWidth, viewHeight);
 
     const playerIso = tileToScreen(player.x, player.y);
-    const camX = viewWidth / 2 - playerIso.x;
-    const camY = viewHeight / 2 - playerIso.y;
+    let camX = viewWidth / 2 - playerIso.x;
+    let camY = viewHeight / 2 - playerIso.y;
+    if (isNaN(camX)) camX = 0;
+    if (isNaN(camY)) camY = 0;
 
     ctx.save();
     ctx.translate(camX, camY);
@@ -14289,8 +14308,16 @@ let lastTime = performance.now();
 function gameLoop(now) {
     const dt = Math.min(0.1, (now - lastTime) / 1000);
     lastTime = now;
-    update(dt);
-    render();
+    try {
+        update(dt);
+    } catch (e) {
+        console.error('Update hatası:', e);
+    }
+    try {
+        render();
+    } catch (e) {
+        console.error('Render hatası:', e);
+    }
     requestAnimationFrame(gameLoop);
 }
 
@@ -14710,9 +14737,19 @@ function applyLoadedCharacter(c) {
         if (c.mapId) {
             currentMapId = normalizeMapId(c.mapId);
         }
-        if (c.x !== undefined && c.y !== undefined) {
-            player.x = Number(c.x);
-            player.y = Number(c.y);
+        if (c.x !== undefined && c.y !== undefined && !isNaN(Number(c.x)) && !isNaN(Number(c.y))) {
+            const numX = Number(c.x);
+            const numY = Number(c.y);
+            if (numX >= 1 && numX <= MAP_SIZE - 2 && numY >= 1 && numY <= MAP_SIZE - 2) {
+                player.x = numX;
+                player.y = numY;
+            } else {
+                player.x = 13.5;
+                player.y = 11.5;
+            }
+        } else {
+            player.x = 13.5;
+            player.y = 11.5;
         }
         SafeStorage.setItem('mmo_character_name', player.name);
 
