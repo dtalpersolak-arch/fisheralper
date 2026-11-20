@@ -44,6 +44,11 @@ let lastMoveEmitTime = 0;
 
 const PRIMARY_RAILWAY_URL = 'https://fishingalper-production.up.railway.app';
 
+function updateInventoryBadge() {
+    if (typeof updateGoldHUD === 'function') updateGoldHUD();
+}
+window.updateInventoryBadge = updateInventoryBadge;
+
 function getServerApiUrl(endpoint) {
     if (!endpoint) endpoint = '';
     if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
@@ -8084,8 +8089,17 @@ function renderGuildWindow() {
         `;
     }).join('');
 
-    // Üye Tablosu HTML'i
-    const memberRows = (activeGuild.members || []).map(m => {
+    // Üye Tablosu HTML'i (Tekilleştirilmiş liste)
+    const seenMemberNames = new Set();
+    const uniqueMembers = (activeGuild.members || []).filter(m => {
+        if (!m || !m.name) return false;
+        const lower = m.name.toLowerCase();
+        if (seenMemberNames.has(lower)) return false;
+        seenMemberNames.add(lower);
+        return true;
+    });
+
+    const memberRows = uniqueMembers.map(m => {
         const isSelf = m.name && player.name && m.name.toLowerCase() === player.name.toLowerCase();
         const statusBadge = m.online
             ? `<span class="badge-online">🟢 Çevrimiçi</span>`
@@ -15163,9 +15177,30 @@ async function checkServerStatus() {
     const txt = document.getElementById('auth-status-text');
 
     const tryUrl = getServerApiUrl('/api/status');
+    const fetchWithTimeout = async (url, ms = 3500) => {
+        try {
+            if (typeof AbortController !== 'undefined') {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), ms);
+                try {
+                    const res = await fetch(url, { method: 'GET', cache: 'no-cache', signal: controller.signal });
+                    clearTimeout(timer);
+                    return res;
+                } catch (err) {
+                    clearTimeout(timer);
+                    return null;
+                }
+            } else {
+                return await fetch(url, { method: 'GET', cache: 'no-cache' });
+            }
+        } catch (e) {
+            return null;
+        }
+    };
+
     try {
-        const res = await fetch(tryUrl, { method: 'GET', cache: 'no-cache' });
-        if (res.ok) {
+        const res = await fetchWithTimeout(tryUrl, 3500);
+        if (res && res.ok) {
             let data = null;
             try { data = await res.json(); } catch (e) {}
             const isOnline = data ? (data.online === true || data.status === 'online' || data.onlinePlayers !== undefined) : true;
@@ -15177,24 +15212,23 @@ async function checkServerStatus() {
                 return true;
             }
         }
-    } catch (e) {
-        // Fallback denemesi: Farklı bir yoldan (/api/status veya Railway tam url) tekrar dene
-        const fallbackUrl = tryUrl.startsWith('http') ? '/api/status' : `${PRIMARY_RAILWAY_URL}/api/status`;
+    } catch (e) {}
+
+    // Fallback: Yerel geliştirme portu (3000) açıksa orayı dene
+    if (!tryUrl.includes('localhost:3000')) {
         try {
-            const res2 = await fetch(fallbackUrl, { method: 'GET', cache: 'no-cache' });
-            if (res2.ok) {
-                let data2 = null;
-                try { data2 = await res2.json(); } catch (e2) {}
-                const isOnline2 = data2 ? (data2.online === true || data2.status === 'online' || data2.onlinePlayers !== undefined) : true;
-                if (isOnline2) {
-                    serverOnline = true;
-                    if (dot) dot.className = 'auth-status-dot online';
-                    const count2 = (data2 && data2.onlinePlayers !== undefined) ? data2.onlinePlayers : 0;
-                    if (txt) txt.textContent = `Sunucu: 🟢 Çevrimiçi (${count2} Oyuncu Aktif)`;
-                    return true;
-                }
+            const localRes = await fetchWithTimeout('http://localhost:3000/api/status', 1200);
+            if (localRes && localRes.ok) {
+                let data = null;
+                try { data = await localRes.json(); } catch (e) {}
+                serverOnline = true;
+                SafeStorage.setItem('mmo_server_url', 'http://localhost:3000');
+                if (dot) dot.className = 'auth-status-dot online';
+                const count = (data && data.onlinePlayers !== undefined) ? data.onlinePlayers : 0;
+                if (txt) txt.textContent = `Sunucu: 🟢 Yerel Node.js Çevrimiçi (${count} Oyuncu)`;
+                return true;
             }
-        } catch (e2) {}
+        } catch (e) {}
     }
 
     serverOnline = false;
@@ -15216,7 +15250,11 @@ async function tryAutoLogin() {
                 currentUser = data.user;
                 updateAdminPrivileges();
                 if (data.character) {
-                    applyLoadedCharacter(data.character);
+                    try {
+                        applyLoadedCharacter(data.character);
+                    } catch (charErr) {
+                        console.warn('tryAutoLogin applyLoadedCharacter UI uyarısı:', charErr);
+                    }
                     closeAuthGateway();
                     initSocketConnection();
                     showToast(`👋 Tekrar hoş geldin, ${player.name}!`, '#80ed99');
@@ -15297,7 +15335,11 @@ async function handleLoginSubmit() {
             updateAdminPrivileges();
 
             if (data.character) {
-                applyLoadedCharacter(data.character);
+                try {
+                    applyLoadedCharacter(data.character);
+                } catch (charErr) {
+                    console.warn('applyLoadedCharacter UI uyarısı:', charErr);
+                }
                 closeAuthGateway();
                 initSocketConnection();
                 showToast(`⚔️ Hoş geldin, ${player.name}! Dünyaya bağlandın.`, '#80ed99');
