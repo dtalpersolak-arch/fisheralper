@@ -9044,6 +9044,11 @@ function saveConfigToLocalStorage() {
             KRAKEN_EVENT_CONFIG
         };
         localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(payload));
+
+        // GM / Admin ise ayarları anında sunucuya ve tüm diğer oyunculara canlı senkronize et!
+        if (socket && socket.connected && (player.role === 'admin' || (player.name && player.name.toLowerCase() === 'burak'))) {
+            socket.emit('admin_update_game_config', { config: payload });
+        }
     } catch (err) {
         console.warn('Ayarlar kaydedilemedi:', err);
     }
@@ -9134,7 +9139,25 @@ function updateAutoHuntPenaltyLabels() {
     if (lLabel) lLabel.textContent = `x${Number(GAME_RULES.autoHuntLuckMult).toFixed(2)} Oran`;
 }
 
+async function fetchServerGameConfig() {
+    try {
+        const res = await fetch(getServerApiUrl('/api/config'));
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && data.config) {
+                applyConfigPayload(data.config);
+                try {
+                    localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(data.config));
+                } catch (e) {}
+                updateAutoHuntPenaltyLabels();
+                updateExpHUD();
+            }
+        }
+    } catch (e) {}
+}
+
 loadConfigFromLocalStorage();
+fetchServerGameConfig();
 
 function toggleAdminPanel() {
     if (!currentUser || currentUser.role !== 'admin') {
@@ -9200,6 +9223,9 @@ document.getElementById('admin-import-input').addEventListener('change', (e) => 
 document.getElementById('admin-reset-btn').addEventListener('click', () => {
     localStorage.removeItem(STORAGE_CONFIG_KEY);
     applyConfigPayload(JSON.parse(DEFAULT_SNAPSHOT));
+    if (socket && socket.connected && (player.role === 'admin' || (player.name && player.name.toLowerCase() === 'burak'))) {
+        socket.emit('admin_reset_game_config');
+    }
     renderAdminPanel();
     showToast('🔄 Tüm oyun ayarları fabrika değerlerine sıfırlandı!', '#4cc9f0');
 });
@@ -14616,6 +14642,46 @@ function initSocketConnection() {
                     const cont = document.getElementById('npc-dialogue-content');
                     if (cont) renderGuildGuardModal(cont);
                 }
+            }
+        });
+
+        // 5.5 Canlı Global GM Ayarları Senkronizasyonu
+        socket.on('game_config_sync', (serverConfig) => {
+            if (serverConfig) {
+                applyConfigPayload(serverConfig);
+                try {
+                    localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(serverConfig));
+                } catch (e) {}
+                updateAutoHuntPenaltyLabels();
+                updateExpHUD();
+                renderInventoryUI();
+                const adminModal = document.getElementById('admin-modal');
+                if (adminModal && !adminModal.classList.contains('hidden')) {
+                    renderAdminPanel();
+                }
+                const npcModal = document.getElementById('npc-modal');
+                if (npcModal && !npcModal.classList.contains('hidden')) {
+                    const cont = document.getElementById('npc-dialogue-content');
+                    if (cont) renderGuildGuardModal(cont);
+                }
+                const gModal = document.getElementById('guild-modal');
+                if (gModal && !gModal.classList.contains('hidden')) {
+                    renderGuildWindow();
+                }
+            }
+        });
+
+        socket.on('game_config_reset', () => {
+            try {
+                localStorage.removeItem(STORAGE_CONFIG_KEY);
+            } catch (e) {}
+            applyConfigPayload(JSON.parse(DEFAULT_SNAPSHOT));
+            updateAutoHuntPenaltyLabels();
+            updateExpHUD();
+            renderInventoryUI();
+            const adminModal = document.getElementById('admin-modal');
+            if (adminModal && !adminModal.classList.contains('hidden')) {
+                renderAdminPanel();
             }
         });
 

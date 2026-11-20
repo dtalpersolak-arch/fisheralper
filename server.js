@@ -391,6 +391,28 @@ const DB = {
         }
     },
 
+    async getGlobalConfig() {
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query("SELECT value FROM game_configs WHERE key = 'global_config'");
+            return res.rows[0]?.value || null;
+        } else {
+            return (jsonDb.gameConfigs && jsonDb.gameConfigs['global_config']) || null;
+        }
+    },
+
+    async saveGlobalConfig(config) {
+        if (dbMode === 'postgres') {
+            await pgPool.query(
+                "INSERT INTO game_configs (key, value) VALUES ('global_config', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+                [JSON.stringify(config)]
+            );
+        } else {
+            if (!jsonDb.gameConfigs) jsonDb.gameConfigs = {};
+            jsonDb.gameConfigs['global_config'] = config;
+            saveJsonDb(true);
+        }
+    },
+
     async saveMarketListings(listings) {
         if (dbMode === 'postgres') {
             await pgPool.query('DELETE FROM market_listings');
@@ -713,6 +735,16 @@ app.get('/api/guilds', async (req, res) => {
     }
 });
 
+// 8. OYUN GLOBAL AYARLARI (GM Ayarları Senkronizasyonu)
+app.get('/api/config', async (req, res) => {
+    try {
+        const config = await DB.getGlobalConfig();
+        res.json({ success: true, config });
+    } catch (err) {
+        res.status(500).json({ success: false, config: null });
+    }
+});
+
 // 7. SUNUCU DURUMU (Ping / Health)
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
@@ -802,6 +834,11 @@ io.on('connection', (socket) => {
                 if (g) socket.emit('guild_data_updated', g);
             }).catch(() => {});
         }
+
+        // Sunucuda kayıtlı global GM oyun ayarları varsa oyuncuya anında gönder
+        DB.getGlobalConfig().then(cfg => {
+            if (cfg) socket.emit('game_config_sync', cfg);
+        }).catch(() => {});
     });
 
     // 2. Oyuncu Hareketi (Anlık Pozisyon & Yön Güncellemesi)
@@ -1173,6 +1210,29 @@ io.on('connection', (socket) => {
     });
 
     // 6. Bağlantı Koptu
+    // 5.5 Canlı GM / Oyun Ayarları Senkronizasyonu (Kraken Zamanı, Droplar, Kurallar)
+    socket.on('admin_update_game_config', async (data) => {
+        const p = onlinePlayers[socket.id];
+        const isAuthorized = p && (p.role === 'admin' || (p.name && p.name.toLowerCase() === 'burak'));
+        if (!isAuthorized) return;
+
+        const { config } = data || {};
+        if (!config) return;
+
+        await DB.saveGlobalConfig(config);
+        // Tüm sunucuya canlı dağıt
+        io.emit('game_config_sync', config);
+    });
+
+    socket.on('admin_reset_game_config', async () => {
+        const p = onlinePlayers[socket.id];
+        const isAuthorized = p && (p.role === 'admin' || (p.name && p.name.toLowerCase() === 'burak'));
+        if (!isAuthorized) return;
+
+        await DB.saveGlobalConfig(null);
+        io.emit('game_config_reset');
+    });
+
     socket.on('disconnect', () => {
         const p = onlinePlayers[socket.id];
         if (p) {
