@@ -15371,18 +15371,16 @@ async function handleLoginSubmit() {
         }
 
         const isLocalAdmin = (username.toLowerCase() === 'burak' || username.toLowerCase() === 'admin' || (localAcc && localAcc.role === 'admin'));
-        const userEmail = localAcc ? localAcc.email : 'local@mmo.local';
+        const userEmail = localAcc ? localAcc.email : `${username.toLowerCase()}@local.mmo`;
         currentUser = { id: 1, username, email: userEmail, role: isLocalAdmin ? 'admin' : 'player' };
         saveLocalAccount(username, userEmail, password, currentUser.role);
         updateAdminPrivileges();
-        const savedName = SafeStorage.getItem('mmo_character_name');
+        
+        player.name = username;
+        SafeStorage.setItem('mmo_character_name', username);
         closeAuthGateway();
-        if (savedName) {
-            player.name = savedName;
-            showToast(`⚡ Yerel Mod: Hoş geldin, ${player.name}!`, '#ffd166');
-        } else {
-            openCharacterCreation();
-        }
+        showToast(`⚡ Hoş geldin, ${player.name}! Dünyaya adım attın.`, '#80ed99');
+        addChatMessage('Sistem', `Hoş geldin ${player.name}! (Çevrimdışı / Bağımsız Modda oynuyorsun).`, 'system');
     }
 }
 
@@ -15512,29 +15510,84 @@ function logoutUser() {
     showToast('🚪 Çıkış yapıldı. Yeni veya farklı bir hesapla giriş yapabilirsiniz!', '#ffd166');
 }
 
-function initAuthGatewaySystem() {
+function switchAuthTab(tab) {
     const tabLogin = document.getElementById('auth-tab-btn-login');
     const tabRegister = document.getElementById('auth-tab-btn-register');
     const formLogin = document.getElementById('auth-login-form');
     const formRegister = document.getElementById('auth-register-form');
-
-    if (tabLogin && tabRegister && formLogin && formRegister) {
-        tabLogin.onclick = () => {
-            tabLogin.classList.add('active');
-            tabRegister.classList.remove('active');
-            formLogin.classList.remove('hidden');
-            formRegister.classList.add('hidden');
-            clearAuthErrors();
-        };
-
-        tabRegister.onclick = () => {
-            tabRegister.classList.add('active');
-            tabLogin.classList.remove('active');
-            formRegister.classList.remove('hidden');
-            formLogin.classList.add('hidden');
-            clearAuthErrors();
-        };
+    if (tab === 'login') {
+        if (tabLogin) tabLogin.classList.add('active');
+        if (tabRegister) tabRegister.classList.remove('active');
+        if (formLogin) formLogin.classList.remove('hidden');
+        if (formRegister) formRegister.classList.add('hidden');
+    } else {
+        if (tabRegister) tabRegister.classList.add('active');
+        if (tabLogin) tabLogin.classList.remove('active');
+        if (formRegister) formRegister.classList.remove('hidden');
+        if (formLogin) formLogin.classList.add('hidden');
     }
+    clearAuthErrors();
+}
+window.switchAuthTab = switchAuthTab;
+
+function toggleServerSettings() {
+    const serverConfigRow = document.getElementById('auth-server-config-row');
+    if (serverConfigRow) serverConfigRow.classList.toggle('hidden');
+}
+window.toggleServerSettings = toggleServerSettings;
+
+function saveCustomServer() {
+    const customServerInput = document.getElementById('auth-custom-server-input');
+    const serverConfigRow = document.getElementById('auth-server-config-row');
+    const val = (customServerInput?.value || '').trim();
+    if (val) {
+        SafeStorage.setItem('mmo_server_url', val);
+        showToast(`🌐 Sunucu adresi kaydedildi: ${val}`, '#80ed99');
+    } else {
+        SafeStorage.removeItem('mmo_server_url');
+        showToast('🌐 Otomatik sunucu moduna geçildi.', '#ffd166');
+    }
+    if (serverConfigRow) serverConfigRow.classList.add('hidden');
+    checkServerStatus();
+}
+window.saveCustomServer = saveCustomServer;
+
+function resetCustomServer() {
+    const customServerInput = document.getElementById('auth-custom-server-input');
+    const serverConfigRow = document.getElementById('auth-server-config-row');
+    if (customServerInput) customServerInput.value = '';
+    SafeStorage.removeItem('mmo_server_url');
+    showToast('🌐 Varsayılan sunucu adresine dönüldü.', '#ffd166');
+    if (serverConfigRow) serverConfigRow.classList.add('hidden');
+    checkServerStatus();
+}
+window.resetCustomServer = resetCustomServer;
+
+function handleOfflinePlay() {
+    const identInput = document.getElementById('auth-login-ident');
+    const raw = (identInput?.value || '').trim() || 'Balıkçı';
+    const isBurak = (raw.toLowerCase() === 'burak' || raw.toLowerCase() === 'admin');
+    currentUser = { id: 1, username: raw, email: 'local@mmo.local', role: isBurak ? 'admin' : 'player' };
+    updateAdminPrivileges();
+    const savedName = SafeStorage.getItem('mmo_character_name');
+    closeAuthGateway();
+    if (savedName) {
+        player.name = savedName;
+        showToast(`⚡ Çevrimdışı Mod: Hoş geldin, ${player.name}!`, '#ffd166');
+    } else {
+        openCharacterCreation();
+    }
+}
+window.handleOfflinePlay = handleOfflinePlay;
+window.handleLoginSubmit = handleLoginSubmit;
+window.handleRegisterSubmit = handleRegisterSubmit;
+
+function initAuthGatewaySystem() {
+    const tabLogin = document.getElementById('auth-tab-btn-login');
+    const tabRegister = document.getElementById('auth-tab-btn-register');
+
+    if (tabLogin) tabLogin.onclick = () => switchAuthTab('login');
+    if (tabRegister) tabRegister.onclick = () => switchAuthTab('register');
 
     const btnLogin = document.getElementById('auth-btn-login');
     if (btnLogin) btnLogin.onclick = handleLoginSubmit;
@@ -15543,63 +15596,20 @@ function initAuthGatewaySystem() {
     if (btnRegister) btnRegister.onclick = handleRegisterSubmit;
 
     const btnOffline = document.getElementById('auth-btn-offline');
-    if (btnOffline) {
-        btnOffline.onclick = () => {
-            const identInput = document.getElementById('auth-login-ident');
-            const raw = (identInput?.value || '').trim() || 'Balıkçı';
-            const isBurak = (raw.toLowerCase() === 'burak' || raw.toLowerCase() === 'admin');
-            currentUser = { id: 1, username: raw, email: 'local@mmo.local', role: isBurak ? 'admin' : 'player' };
-            updateAdminPrivileges();
-            const savedName = SafeStorage.getItem('mmo_character_name');
-            closeAuthGateway();
-            if (savedName) {
-                player.name = savedName;
-                showToast(`⚡ Çevrimdışı Mod: Hoş geldin, ${player.name}!`, '#ffd166');
-            } else {
-                openCharacterCreation();
-            }
-        };
-    }
+    if (btnOffline) btnOffline.onclick = handleOfflinePlay;
 
     const serverSettingsBtn = document.getElementById('auth-server-settings-btn');
-    const serverConfigRow = document.getElementById('auth-server-config-row');
-    const customServerInput = document.getElementById('auth-custom-server-input');
-    const saveServerBtn = document.getElementById('auth-save-server-btn');
-    const resetServerBtn = document.getElementById('auth-reset-server-btn');
+    if (serverSettingsBtn) serverSettingsBtn.onclick = toggleServerSettings;
 
+    const saveServerBtn = document.getElementById('auth-save-server-btn');
+    if (saveServerBtn) saveServerBtn.onclick = saveCustomServer;
+
+    const resetServerBtn = document.getElementById('auth-reset-server-btn');
+    if (resetServerBtn) resetServerBtn.onclick = resetCustomServer;
+
+    const customServerInput = document.getElementById('auth-custom-server-input');
     if (customServerInput) {
         customServerInput.value = SafeStorage.getItem('mmo_server_url') || '';
-    }
-
-    if (serverSettingsBtn && serverConfigRow) {
-        serverSettingsBtn.onclick = () => {
-            serverConfigRow.classList.toggle('hidden');
-        };
-    }
-
-    if (saveServerBtn && customServerInput) {
-        saveServerBtn.onclick = () => {
-            const val = customServerInput.value.trim();
-            if (val) {
-                SafeStorage.setItem('mmo_server_url', val);
-                showToast(`🌐 Sunucu adresi kaydedildi: ${val}`, '#80ed99');
-            } else {
-                SafeStorage.removeItem('mmo_server_url');
-                showToast('🌐 Otomatik sunucu moduna geçildi.', '#ffd166');
-            }
-            if (serverConfigRow) serverConfigRow.classList.add('hidden');
-            checkServerStatus();
-        };
-    }
-
-    if (resetServerBtn && customServerInput) {
-        resetServerBtn.onclick = () => {
-            customServerInput.value = '';
-            SafeStorage.removeItem('mmo_server_url');
-            showToast('🌐 Varsayılan sunucu adresine dönüldü.', '#ffd166');
-            if (serverConfigRow) serverConfigRow.classList.add('hidden');
-            checkServerStatus();
-        };
     }
 
     const loginPass = document.getElementById('auth-login-pass');
@@ -15649,10 +15659,10 @@ function initAuthGatewaySystem() {
     });
 }
 
-initWikiSystem();
-initChatSystem();
-initCharacterCreationModal();
-sanitizeVaultAndInventoryCostumes();
-initAuthGatewaySystem();
+try { initWikiSystem(); } catch(e) { console.warn('initWikiSystem:', e); }
+try { initChatSystem(); } catch(e) { console.warn('initChatSystem:', e); }
+try { initCharacterCreationModal(); } catch(e) { console.warn('initCharacterCreationModal:', e); }
+try { sanitizeVaultAndInventoryCostumes(); } catch(e) { console.warn('sanitizeVaultAndInventoryCostumes:', e); }
+try { initAuthGatewaySystem(); } catch(e) { console.warn('initAuthGatewaySystem:', e); }
 isGameReady = true;
 requestAnimationFrame(gameLoop);
