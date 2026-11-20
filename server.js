@@ -165,6 +165,37 @@ async function initDatabase() {
     console.log('📂 Yerel / Bağımsız JSON Veritabanı devrede (data/db.json).');
 }
 
+function sanitizeGuildData(guild) {
+    if (!guild || typeof guild !== 'object') return guild;
+    if (guild.leader) {
+        const cleanMembers = [];
+        const seen = new Set();
+        const existingLeader = (guild.members || []).find(m => m && m.name && m.name.toLowerCase() === guild.leader.toLowerCase());
+        cleanMembers.push({
+            name: guild.leader,
+            role: 'Lider',
+            level: (existingLeader && existingLeader.level) || 1,
+            online: existingLeader ? Boolean(existingLeader.online) : true
+        });
+        seen.add(guild.leader.toLowerCase());
+
+        (guild.members || []).forEach(m => {
+            if (!m || !m.name) return;
+            const lower = m.name.toLowerCase();
+            if (seen.has(lower)) return;
+            seen.add(lower);
+            cleanMembers.push({
+                name: m.name,
+                role: m.role === 'Lider' ? 'Üye' : (m.role || 'Üye'),
+                level: m.level || 1,
+                online: Boolean(m.online)
+            });
+        });
+        guild.members = cleanMembers;
+    }
+    return guild;
+}
+
 // Veritabanı Yardımcı Fonksiyonları
 const DB = {
     async findUserByUsernameOrEmail(identifier) {
@@ -327,30 +358,36 @@ const DB = {
     },
 
     async getAllGuilds() {
+        let guilds = {};
         if (dbMode === 'postgres') {
             const res = await pgPool.query("SELECT value FROM game_configs WHERE key = 'guilds'");
-            return res.rows[0]?.value || {};
+            guilds = res.rows[0]?.value || {};
         } else {
-            return jsonDb.guilds || {};
+            guilds = jsonDb.guilds || {};
         }
+        for (const [k, v] of Object.entries(guilds)) {
+            guilds[k] = sanitizeGuildData(v);
+        }
+        return guilds;
     },
 
     async getGuild(name) {
         const all = await this.getAllGuilds();
-        return all[name] || null;
+        return all[name] ? sanitizeGuildData(all[name]) : null;
     },
 
     async saveGuild(name, guildData) {
+        const sanitized = sanitizeGuildData(guildData);
         if (dbMode === 'postgres') {
             const current = await this.getAllGuilds();
-            current[name] = guildData;
+            current[name] = sanitized;
             await pgPool.query(
                 "INSERT INTO game_configs (key, value) VALUES ('guilds', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
                 [JSON.stringify(current)]
             );
         } else {
             if (!jsonDb.guilds) jsonDb.guilds = {};
-            jsonDb.guilds[name] = guildData;
+            jsonDb.guilds[name] = sanitized;
             saveJsonDb(true);
         }
     },

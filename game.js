@@ -1922,8 +1922,15 @@ function updateExpHUD() {
 updateExpHUD();
 
 function updateGoldHUD() {
-    document.getElementById('hud-gold').textContent = player.gold;
+    const el = document.getElementById('hud-gold');
+    if (el) el.textContent = (player.gold || 0).toLocaleString('tr-TR');
+    const modalGoldEl = document.querySelector('.market-header-tabs ~ .price-tag, #market-modal .price-tag');
+    if (modalGoldEl) modalGoldEl.textContent = `🪙 ${(player.gold || 0).toLocaleString('tr-TR')} Altın`;
 }
+function updateInventoryBadge() {
+    updateGoldHUD();
+}
+window.updateInventoryBadge = updateInventoryBadge;
 updateGoldHUD();
 renderBuffBar();
 
@@ -4556,7 +4563,9 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
                     addItemToInventory(l.itemId, l.count, l.enchants || null);
                     marketListings = marketListings.filter(item => item.id !== l.id);
                     saveMarketData();
+                    updateGoldHUD();
                     updateExpHUD();
+                    renderBuffBar();
                     if (socket && socket.connected) {
                         socket.emit('market_buy_listing', { listingId: l.id, buyerName: player.name });
                     }
@@ -7044,9 +7053,56 @@ if (player.guildName && (!activeGuild || !activeGuild.name)) {
     activeGuild = null;
 }
 
+function sanitizeActiveGuild(guild) {
+    if (!guild || typeof guild !== 'object') return guild;
+    if (guild.leader) {
+        const cleanMembers = [];
+        const seen = new Set();
+        // 1. Lonca lideri daima ilk sırada ve rolü 'Lider'
+        const existingLeader = (guild.members || []).find(m => m && m.name && m.name.toLowerCase() === guild.leader.toLowerCase());
+        cleanMembers.push({
+            name: guild.leader,
+            role: 'Lider',
+            level: (existingLeader && existingLeader.level) || 1,
+            online: existingLeader ? Boolean(existingLeader.online) : true
+        });
+        seen.add(guild.leader.toLowerCase());
+
+        // 2. Diğer tüm üyeler tekil olarak 'Üye' (veya Subay) olarak eklenir
+        (guild.members || []).forEach(m => {
+            if (!m || !m.name) return;
+            const lower = m.name.toLowerCase();
+            if (seen.has(lower)) return;
+            seen.add(lower);
+            cleanMembers.push({
+                name: m.name,
+                role: m.role === 'Lider' ? 'Üye' : (m.role || 'Üye'),
+                level: m.level || 1,
+                online: Boolean(m.online)
+            });
+        });
+
+        // 3. Mevcut oyuncu loncadaysa ve üyelerde eksikse ekle
+        if (player.name && player.guildName && player.guildName.toLowerCase() === (guild.name || '').toLowerCase()) {
+            const pLower = player.name.toLowerCase();
+            if (!seen.has(pLower)) {
+                cleanMembers.push({
+                    name: player.name,
+                    role: pLower === guild.leader.toLowerCase() ? 'Lider' : 'Üye',
+                    level: player.level || 1,
+                    online: true
+                });
+            }
+        }
+        guild.members = cleanMembers;
+    }
+    return guild;
+}
+
 function saveGuildData() {
     try {
         if (activeGuild) {
+            sanitizeActiveGuild(activeGuild);
             localStorage.setItem('mmo_guild_data', JSON.stringify(activeGuild));
             localStorage.setItem('mmo_player_guild', activeGuild.name);
             player.guildName = activeGuild.name;
@@ -7371,12 +7427,9 @@ function renderGuildNPCModal(container) {
         });
     } else {
         // Lonca Üyesi / Lideri Ekranı: 2 Seçenek (Lonca Kasası & Lonca'dan Ayrıl)
-        if (activeGuild.members && activeGuild.members.length > 0) {
-            const leaderMember = activeGuild.members.find(m => m.isPlayer || m.role === 'Lider');
-            if (leaderMember) {
-                leaderMember.name = player.name || 'Oyuncu';
-                leaderMember.level = player.level || 1;
-            }
+        if (activeGuild) {
+            sanitizeActiveGuild(activeGuild);
+            saveGuildData();
         }
 
         const isMaxLv = (activeGuild.level || 1) >= 10;
@@ -7921,7 +7974,9 @@ function renderGuildWindow() {
         return;
     }
 
-    // Yerel oyuncunun seviyesini ve online durumunu güncelle (Lideri ASLA değiştirme!)
+    // Lonca verisini doğrula ve temizle (Lider daima Lider, üyeler tekil)
+    sanitizeActiveGuild(activeGuild);
+    saveGuildData();
     if (activeGuild.members && activeGuild.members.length > 0) {
         const selfMember = activeGuild.members.find(m => m.name && player.name && m.name.toLowerCase() === player.name.toLowerCase());
         if (selfMember) {
