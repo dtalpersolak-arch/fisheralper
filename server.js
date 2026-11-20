@@ -886,7 +886,7 @@ const onlinePlayers = {};
 io.on('connection', (socket) => {
     // 1. Oyuncu Dünyaya Katıldı
     socket.on('player_join', (data) => {
-        const { token, charName, x, y, mapId, costume, costumePlus, rod, rodPlus, isSOS, boatId, level, guildName } = data || {};
+        const { token, charName, x, y, mapId, costume, boatId, level, guildName } = data;
         let userId = null;
         let role = 'player';
 
@@ -917,10 +917,6 @@ io.on('connection', (socket) => {
             isMoving: false,
             mapId: safeMap,
             costume: costume || 'costume_fisher',
-            costumePlus: Number(costumePlus) || 0,
-            rod: rod || null,
-            rodPlus: Number(rodPlus) || 0,
-            isSOS: Boolean(isSOS),
             boatId: boatId || null,
             guildName: guildName || '',
             isFishing: false
@@ -938,7 +934,7 @@ io.on('connection', (socket) => {
         // Genel çevrimiçi sayısını güncelle
         io.emit('online_count', Object.keys(onlinePlayers).length);
 
-        // Oyuncunun loncası varsa, sunucudaki en güncel lonca verisini gönder (Tüm yetenekler & bufflar)
+        // Oyuncunun loncası varsa, sunucudaki en güncel lonca verisini gönder (Destroyer & Kraken senkronizasyonu)
         if (guildName) {
             DB.getGuild(guildName).then(g => {
                 if (g) {
@@ -989,16 +985,12 @@ io.on('connection', (socket) => {
         });
     });
 
-    // 2.1 Oyuncu Profil Güncellemesi (Lonca, Kostüm, Olta, Parlama & Efsunlar, Seviye)
+    // 2.1 Oyuncu Profil Güncellemesi (Lonca, Kostüm, Seviye)
     socket.on('player_update_profile', (data) => {
         const p = onlinePlayers[socket.id];
         if (!p) return;
         if (data.guildName !== undefined) p.guildName = data.guildName;
         if (data.costume !== undefined) p.costume = data.costume;
-        if (data.costumePlus !== undefined) p.costumePlus = Number(data.costumePlus) || 0;
-        if (data.rod !== undefined) p.rod = data.rod;
-        if (data.rodPlus !== undefined) p.rodPlus = Number(data.rodPlus) || 0;
-        if (data.isSOS !== undefined) p.isSOS = Boolean(data.isSOS);
         if (data.level !== undefined) p.level = data.level;
         if (data.boatId !== undefined) p.boatId = data.boatId;
 
@@ -1006,89 +998,9 @@ io.on('connection', (socket) => {
             socketId: socket.id,
             guildName: p.guildName,
             costume: p.costume,
-            costumePlus: p.costumePlus,
-            rod: p.rod,
-            rodPlus: p.rodPlus,
-            isSOS: p.isSOS,
             level: p.level,
             boatId: p.boatId
         });
-    });
-
-    // 2.2 Lonca Yeteneği Geliştirme (Lider Tarafından)
-    socket.on('guild_upgrade_skill', async (data) => {
-        const { guildName, skillId } = data || {};
-        if (!guildName || !skillId) return;
-        const guild = await DB.getGuild(guildName);
-        if (!guild) return;
-        const p = onlinePlayers[socket.id];
-        if (!p || (guild.leader && guild.leader.toLowerCase() !== p.name.toLowerCase())) {
-            socket.emit('guild_action_error', { message: 'Sadece lonca lideri yetenek puanı dağıtabilir!' });
-            return;
-        }
-        if ((guild.skillPoints || 0) <= 0) return;
-        guild.skills = guild.skills || {
-            guild_blessing: 0,
-            guild_alchemist: 0,
-            guild_veteran: 0,
-            guild_gambler: 0,
-            guild_carpenter: 0
-        };
-        const curLv = Number(guild.skills[skillId] || 0);
-        if (curLv >= 5) return;
-        guild.skills[skillId] = curLv + 1;
-        guild.skillPoints -= 1;
-        await DB.saveGuild(guildName, guild);
-
-        // Tüm lonca üyelerine anında canlı güncelleme gönder
-        for (const [sId, pl] of Object.entries(onlinePlayers)) {
-            if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
-                io.to(sId).emit('guild_data_updated', guild);
-            }
-        }
-    });
-
-    // 2.3 Lonca EXP Kazanımı & Seviye Atlama
-    socket.on('guild_gain_exp', async (data) => {
-        const { guildName, expGain } = data || {};
-        if (!guildName || !expGain) return;
-        const guild = await DB.getGuild(guildName);
-        if (!guild) return;
-        if ((guild.level || 1) >= 10) return;
-
-        guild.exp = (guild.exp || 0) + Number(expGain);
-        let leveledUp = false;
-        while (guild.exp >= 100 && guild.level < 10) {
-            guild.level += 1;
-            guild.skillPoints = (guild.skillPoints || 0) + 1;
-            guild.exp -= 100;
-            leveledUp = true;
-        }
-        await DB.saveGuild(guildName, guild);
-
-        for (const [sId, pl] of Object.entries(onlinePlayers)) {
-            if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
-                io.to(sId).emit('guild_data_updated', guild);
-                if (leveledUp) {
-                    io.to(sId).emit('chat_broadcast', {
-                        sender: 'Lonca',
-                        text: `🎉 Loncamız Lv.${guild.level} seviyesine ulaştı! +1 Yetenek Puanı kazanıldı!`,
-                        role: 'system',
-                        channel: 'all'
-                    });
-                }
-            }
-        }
-    });
-
-    // 2.4 Lonca Verisi İsteme (Taze Senkronizasyon)
-    socket.on('guild_request_data', async (data) => {
-        const { guildName } = data || {};
-        if (!guildName) return;
-        const guild = await DB.getGuild(guildName);
-        if (guild) {
-            socket.emit('guild_data_updated', guild);
-        }
     });
 
     // ========================================================================
@@ -1447,8 +1359,6 @@ io.on('connection', (socket) => {
         const p = onlinePlayers[socket.id];
         if (!p) return;
         p.isFishing = Boolean(data.isFishing);
-        p.waterX = data.waterX;
-        p.waterY = data.waterY;
         socket.to(`map_${p.mapId}`).emit('player_fishing_state', {
             socketId: socket.id,
             isFishing: p.isFishing,
