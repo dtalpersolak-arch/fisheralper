@@ -6958,6 +6958,7 @@ function initCharacterCreationModal() {
     };
 
     submitBtn.onclick = submitAction;
+    window.submitCharacterCreation = submitAction;
     input.addEventListener('keydown', (e) => {
         if (e.code === 'Enter') {
             e.preventDefault();

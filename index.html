@@ -529,10 +529,29 @@
                 if (modal) modal.classList.add('hidden');
                 if (typeof player !== 'undefined') {
                     player.name = name;
+                    if (typeof updateExpHUD === 'function') updateExpHUD();
                     if (typeof showToast === 'function') showToast('⚡ Çevrimdışı Mod devrede: ' + name, '#ffd166');
                 } else {
                     var charModal = document.getElementById('char-create-modal');
                     if (charModal) charModal.classList.remove('hidden');
+                }
+            }
+            function submitCharacterCreation() {
+                var input = document.getElementById('char-name-input');
+                var raw = (input ? input.value : '').trim() || 'Balıkçı';
+                if (raw.length < 2) {
+                    var errText = document.getElementById('char-name-error');
+                    if (errText) errText.classList.remove('hidden');
+                    return;
+                }
+                try { localStorage.setItem('mmo_character_name', raw); } catch(e){}
+                var modal = document.getElementById('char-create-modal');
+                if (modal) modal.classList.add('hidden');
+                if (typeof player !== 'undefined') {
+                    player.name = raw;
+                    if (typeof updateExpHUD === 'function') updateExpHUD();
+                    if (typeof showToast === 'function') showToast('🌟 Hoş geldin, ' + raw + '! Dünyaya adım attın.', '#80ed99');
+                    if (typeof saveCharacterToServer === 'function') saveCharacterToServer();
                 }
             }
         </script>
@@ -554,7 +573,7 @@
                         <label class="char-input-label" for="char-name-input">Karakter Adı</label>
                         <div class="char-input-wrap">
                             <span class="char-input-icon">👤</span>
-                            <input type="text" id="char-name-input" maxlength="16" placeholder="Karakter adını gir..." autocomplete="off">
+                            <input type="text" id="char-name-input" maxlength="16" placeholder="Karakter adını gir..." autocomplete="off" onkeydown="if(event.key==='Enter'){if(typeof submitCharacterCreation==='function')submitCharacterCreation();}">
                         </div>
                         <div id="char-name-error" class="char-error-text hidden">Lütfen 2 ile 16 karakter arasında bir isim girin!</div>
                         <div class="char-input-tip">💡 Karakter adın haritada kafanın üzerinde ve sohbette görünecektir.</div>
@@ -562,7 +581,7 @@
                 </div>
 
                 <div class="char-create-footer">
-                    <button id="char-create-btn" class="action-btn primary char-submit-btn">
+                    <button type="button" id="char-create-btn" class="action-btn primary char-submit-btn" onclick="if(typeof submitCharacterCreation==='function'){submitCharacterCreation();}else{var i=document.getElementById('char-name-input');var n=(i?i.value:'').trim()||'Balıkçı';try{localStorage.setItem('mmo_character_name',n);}catch(e){}document.getElementById('char-create-modal').classList.add('hidden');if(window.player)window.player.name=n;}">
                         <span>⛵ Dünyaya Adım At (Oyuna Başla)</span>
                     </button>
                 </div>
@@ -577,6 +596,6 @@
             document.write('<script src="/socket.io/socket.io.js"><\/script>');
         }
     </script>
-    <script src="game.js?v=2.6.5"></script>
+    <script src="game.js?v=2.6.9"></script>
 </body>
 </html>
