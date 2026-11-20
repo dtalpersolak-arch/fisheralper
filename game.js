@@ -2914,6 +2914,17 @@ function castFishingLine(water, isAuto = false) {
         : (water.tile === TILE.LAKE ? 'lake' : 'sea');
     fishing.waitTimer = 0;
     fishing.waitDuration = baseWait * speedFactor * autoTimeMultiplier;
+    notifyFishingState(true, water.x, water.y);
+}
+
+function notifyFishingState(isFishing, waterX, waterY) {
+    if (socket && socket.connected) {
+        socket.emit('player_fishing', {
+            isFishing: Boolean(isFishing),
+            waterX: waterX !== undefined ? waterX : (fishing.waterX || 0),
+            waterY: waterY !== undefined ? waterY : (fishing.waterY || 0)
+        });
+    }
 }
 
 // Auto-Hunt Aç / Kapat (O Tuşu)
@@ -3103,6 +3114,7 @@ function handleSpaceAction() {
 
         fishing.state = 'IDLE';
         fishingUI.classList.add('hidden');
+        notifyFishingState(false);
     }
 }
 
@@ -3138,6 +3150,7 @@ function cancelFishing(reason) {
         fishing.state = 'IDLE';
         fishingUI.classList.add('hidden');
         if (reason) showToast(reason, '#adb5bd');
+        notifyFishingState(false);
     }
 }
 
@@ -3531,6 +3544,26 @@ function renderBuffBar() {
         }
     });
 
+    // 5. Lonca Yetenek Ağacı Pasif Buffları ([G] Lonca Birlik Bonusları)
+    if (player.guildName && activeGuild && activeGuild.skills && Array.isArray(GUILD_SKILLS)) {
+        GUILD_SKILLS.forEach(sk => {
+            const curLv = Number(activeGuild.skills[sk.id] || 0);
+            if (curLv > 0) {
+                hasAnyBuff = true;
+                const totalBonusText = typeof sk.formatBonus === 'function' ? sk.formatBonus(curLv) : `Lv.${curLv}`;
+                const pill = document.createElement('div');
+                pill.className = 'buff-pill guild-buff';
+                pill.style.borderColor = '#ffd166';
+                pill.style.background = 'linear-gradient(135deg, rgba(229,169,60,0.2) 0%, rgba(179,116,0,0.25) 100%)';
+                pill.innerHTML = `
+                    <span class="buff-name">${sk.icon} <b>${sk.name}</b> (${totalBonusText})</span>
+                    <span class="buff-timer permanent-badge" style="background:#ffd166; color:#000; font-weight:800; border-radius:4px; padding:1px 5px;">Lonca Lv.${curLv}</span>
+                `;
+                bar.appendChild(pill);
+            }
+        });
+    }
+
     if (!hasAnyBuff) {
         bar.innerHTML = `<div class="no-buffs-text">Üzerinde aktif buff veya bonus bulunmuyor</div>`;
     }
@@ -3709,6 +3742,8 @@ function handleInventoryItemClick(invEntry) {
         }
         renderInventoryUI();
         renderBuffBar();
+        syncPlayerProfileToNetwork();
+        saveCharacterToServer();
     } else if (item.type === 'costume') {
         const isSameEquipped = (invEntry.uid && player.equipped.costumeUid === invEntry.uid) ||
                                (!invEntry.uid && player.equipped.costume === item.id);
@@ -3726,6 +3761,8 @@ function handleInventoryItemClick(invEntry) {
         }
         renderInventoryUI();
         renderBuffBar();
+        syncPlayerProfileToNetwork();
+        saveCharacterToServer();
     } else if (item.type === 'bait') {
         if (player.equipped.bait === item.id) {
             player.equipped.bait = null;
@@ -6173,6 +6210,8 @@ function renderAnvilModal(container) {
                         renderAnvilModal(container);
                         renderInventoryUI();
                         renderBuffBar();
+                        syncPlayerProfileToNetwork();
+                        saveCharacterToServer();
                     }, 1200);
                 }
             }
@@ -7117,7 +7156,14 @@ function saveGuildData() {
 }
 
 function getGuildSkillLevel(skillId) {
-    if (!player.guildName || !activeGuild || !activeGuild.skills) return 0;
+    if (!player.guildName) return 0;
+    if (!activeGuild || !activeGuild.skills) {
+        try {
+            const raw = localStorage.getItem('mmo_guild_data');
+            if (raw) activeGuild = JSON.parse(raw);
+        } catch(e) {}
+    }
+    if (!activeGuild || !activeGuild.skills) return 0;
     return Number(activeGuild.skills[skillId] || 0);
 }
 
@@ -7161,6 +7207,9 @@ function gainGuildExp(rarityKeyOrId) {
         activeGuild.exp = 100;
     }
 
+    saveGuildData();
+    renderBuffBar();
+
     if (leveledUp) {
         showToast(`🏛️ TEBRİKLER! Loncanız [Lv.${activeGuild.level}] seviyeye ulaştı! (+1 Lonca Yetenek Puanı)`, '#ffd166');
         addChatMessage('Lonca', `🎉 Loncamız Seviye ${activeGuild.level} oldu! 1 Yetenek Puanı kazanıldı. [G] penceresinden yetenekleri geliştirebilirsiniz.`, 'system');
@@ -7170,7 +7219,9 @@ function gainGuildExp(rarityKeyOrId) {
         }
     }
 
-    saveGuildData();
+    if (socket && socket.connected && player.guildName) {
+        socket.emit('guild_gain_exp', { guildName: player.guildName, expGain });
+    }
 }
 
 function createGuild(rawName) {
@@ -8349,6 +8400,10 @@ function renderGuildWindow() {
                     activeGuild.skills[sk.id] = curLv + 1;
                     saveGuildData();
                     renderGuildWindow();
+                    renderBuffBar();
+                    if (socket && socket.connected) {
+                        socket.emit('guild_upgrade_skill', { guildName: activeGuild.name, skillId: sk.id });
+                    }
                     showToast(`✨ [${sk.name}] Lv.${curLv + 1} seviyesine yükseltildi! Tüm lonca üyeleri bonusu kazandı.`, '#80ed99');
                     addChatMessage('Lonca', `Lonca lideri [${sk.name}] yeteneğini Lv.${curLv + 1} seviyesine yükseltti!`, 'system');
                 };
@@ -11307,7 +11362,7 @@ function drawDestroyerCrew(g, shipX, bY, isLeader) {
         if (leaderInKraken) {
             const hX = shipX - 48;
             const hY = bY - 16;
-            drawCrewMemberSprite(g, hX, hY, '#ffb703', '#fb8500', `👑 ${leaderInKraken.name} [Lider]`, false, true);
+            drawCrewMemberSprite(g, hX, hY, leaderInKraken, `👑 ${leaderInKraken.name} [Lider]`, false, true);
         }
     }
 
@@ -11327,10 +11382,8 @@ function drawDestroyerCrew(g, shipX, bY, isLeader) {
             const slot = deckSlots[i];
             const mX = shipX + slot.dx;
             const mY = bY + slot.dy;
-            const cColor = '#3a86ff';
-            const hColor = '#1d3557';
             const label = `${member.name} [Üye]`;
-            drawCrewMemberSprite(g, mX, mY, cColor, hColor, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
+            drawCrewMemberSprite(g, mX, mY, member, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
         }
     } else {
         // Üye ekranı: Slot 0'da yerel üyenin kendisi vardır
@@ -11351,17 +11404,31 @@ function drawDestroyerCrew(g, shipX, bY, isLeader) {
             const slot = deckSlots[i];
             const mX = shipX + slot.dx;
             const mY = bY + slot.dy;
-            const cColor = '#3a86ff';
-            const hColor = '#1d3557';
             const label = `${member.name} [Üye]`;
-            drawCrewMemberSprite(g, mX, mY, cColor, hColor, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
+            drawCrewMemberSprite(g, mX, mY, member, label, member.isFishing !== false, false, slot.rodAngle, slot.rodLen, i);
         }
     }
 }
 
-function drawCrewMemberSprite(g, mx, my, coatColor, hatColor, nameLabel, isFishing = false, isHelm = false, rodAngle = 0.4, rodLen = 28, slotIndex = 0) {
+function drawCrewMemberSprite(g, mx, my, memberData, nameLabel, isFishing = false, isHelm = false, rodAngle = 0.4, rodLen = 28, slotIndex = 0) {
     const bob = Math.sin(globalTime * 3.0 + slotIndex) * 1.5;
     const bodyY = my - 12 - bob;
+
+    const costume = (memberData && memberData.costume) ? ITEMS[memberData.costume] : null;
+    const coatColor = isHelm ? '#ffb703' : (costume ? costume.vest : '#3a86ff');
+    const hatColor = isHelm ? '#fb8500' : (costume ? (costume.hatColor || costume.pants) : '#1d3557');
+    const cPlus = memberData ? Number(memberData.costumePlus || 0) : 0;
+
+    // Kostüm Halesi
+    if (cPlus > 0 || (costume && costume.isRoyal)) {
+        g.save();
+        g.strokeStyle = cPlus >= 5 ? 'rgba(239, 68, 68, 0.45)' : 'rgba(255, 209, 102, 0.4)';
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.ellipse(mx, bodyY + 5, 8, 12, 0, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
+    }
 
     // Gövde (Ceket/Kıyafet)
     g.fillStyle = coatColor;
@@ -11392,16 +11459,33 @@ function drawCrewMemberSprite(g, mx, my, coatColor, hatColor, nameLabel, isFishi
 
     // Olta ve Suya İnen Misina (Balık Tutma Animasyonu)
     if (isFishing) {
+        const rodItem = (memberData && memberData.rod) ? ITEMS[memberData.rod] : ITEMS.rod_starter;
+        const rodColor = rodItem ? rodItem.rodColor : '#d4a373';
         const rodEndX = mx + Math.cos(rodAngle) * rodLen;
         const rodEndY = bodyY + Math.sin(rodAngle) * rodLen;
 
         // Kamış
-        g.strokeStyle = '#d4a373';
-        g.lineWidth = 2;
+        g.strokeStyle = rodColor;
+        g.lineWidth = 2.5;
         g.beginPath();
         g.moveTo(mx + 2, bodyY + 4);
         g.lineTo(rodEndX, rodEndY);
         g.stroke();
+
+        // Efsun veya SOS Parlaması
+        const rPlus = memberData ? Number(memberData.rodPlus || 0) : 0;
+        const isSosRod = memberData ? Boolean(memberData.isSOS || (rodItem && rodItem.isSOS)) : false;
+
+        if (isSosRod) {
+            drawSilkroadSparkle(g, rodEndX, rodEndY, 3.2, '#ffd166');
+            drawSilkroadSparkle(g, (mx + rodEndX) / 2, (bodyY + rodEndY) / 2, 2.0, '#00f5d4');
+        } else if (rPlus > 0) {
+            g.strokeStyle = rPlus >= 4 ? '#ef4444' : '#ffd166';
+            g.lineWidth = 1.5;
+            g.beginPath();
+            g.arc(rodEndX, rodEndY, 3.5 + Math.sin(globalTime * 5) * 1.2, 0, Math.PI * 2);
+            g.stroke();
+        }
 
         // Misina
         const splashY = my + 14 + (rodAngle > 0 ? 6 : -4);
@@ -11417,6 +11501,10 @@ function drawCrewMemberSprite(g, mx, my, coatColor, hatColor, nameLabel, isFishi
         g.fillStyle = '#ff595e';
         g.beginPath();
         g.arc(rodEndX + 2, splashY + floatWave, 2.5, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(rodEndX + 2, splashY + floatWave - 1.5, 1.5, 0, Math.PI * 2);
         g.fill();
 
         // Suda Mantar Halka Dalgası
@@ -14322,9 +14410,24 @@ function drawRemotePlayer(g, rp, x, y) {
         g.arc(x, headY - 9, 3, 0, Math.PI * 2);
         g.fill();
     } else if (hatType === 'royal_helm') {
+        // Görkemli 5 Köşeli Kraliyet Tacı & Safir Taşı
         g.fillStyle = '#ffd166';
         g.beginPath();
-        g.arc(x, headY - 4, 11, Math.PI, 0);
+        g.moveTo(x - 10, headY - 4);
+        g.lineTo(x - 10, headY - 14);
+        g.lineTo(x - 5, headY - 7);
+        g.lineTo(x, headY - 17);
+        g.lineTo(x + 5, headY - 7);
+        g.lineTo(x + 10, headY - 14);
+        g.lineTo(x + 10, headY - 4);
+        g.closePath();
+        g.fill();
+        g.strokeStyle = '#d4a373';
+        g.lineWidth = 1.5;
+        g.stroke();
+        g.fillStyle = '#00f5d4';
+        g.beginPath();
+        g.arc(x, headY - 8, 2.5, 0, Math.PI * 2);
         g.fill();
     } else {
         g.fillStyle = '#582f0e';
@@ -14333,14 +14436,148 @@ function drawRemotePlayer(g, rp, x, y) {
         g.fill();
     }
 
-    // 5. Olta (Balık Tutuyorsa)
-    if (rp.isFishing) {
-        g.strokeStyle = '#ffd166';
-        g.lineWidth = 2.5;
+    // 4.5 Kostüm Efsun & Kraliyet Parlama Halesi (Body Aura)
+    const cPlus = Number(rp.costumePlus) || 0;
+    if (cPlus > 0 || (costume && (costume.isRoyal || costume.isSOS))) {
+        g.save();
+        const auraColor = cPlus >= 5 ? 'rgba(239, 68, 68, 0.45)' : (cPlus >= 3 ? 'rgba(199, 125, 255, 0.4)' : 'rgba(255, 209, 102, 0.35)');
+        g.strokeStyle = auraColor;
+        g.lineWidth = 2 + cPlus * 0.5;
         g.beginPath();
-        g.moveTo(x + 9, bodyY + 9);
-        g.lineTo(x + 28, bodyY - 15);
+        g.ellipse(x, bodyY + 6, 13 + Math.sin(globalTime * 4) * 1.5, 18, 0, 0, Math.PI * 2);
         g.stroke();
+
+        if (cPlus >= 3 || (costume && costume.isRoyal)) {
+            const s1Y = (bodyY - 4) - ((globalTime * 24) % 28);
+            const s1X = x - 7 + Math.sin(globalTime * 5) * 3;
+            drawSilkroadSparkle(g, s1X, s1Y, 2.0, '#ffffff');
+
+            const s2Y = (bodyY - 2) - (((globalTime + 1.2) * 22) % 28);
+            const s2X = x + 7 + Math.cos(globalTime * 4) * 3;
+            drawSilkroadSparkle(g, s2X, s2Y, 1.8, '#ffd166');
+        }
+        g.restore();
+    }
+
+    // 5. Olta ve Silkroad Online Parlama & Efsun Efektleri (Hava Atma Efekti!)
+    const rodItem = rp.rod ? ITEMS[rp.rod] : (rp.isFishing ? (ITEMS.rod_burak || ITEMS.rod_starter) : null);
+    if (rodItem) {
+        const handX = lookRight ? (x + 9) : (x - 9);
+        const handY = bodyY + 9;
+        const tipX = lookRight ? (handX + 22) : (handX - 22);
+        const tipY = handY - 24;
+
+        // Olta Gövdesi
+        g.strokeStyle = rodItem.rodColor || '#8B4513';
+        g.lineWidth = 3.2;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(handX - (lookRight ? 2 : -2), handY + 3);
+        g.quadraticCurveTo(handX + (lookRight ? 8 : -8), handY - 12, tipX, tipY);
+        g.stroke();
+
+        // Makara
+        g.fillStyle = rodItem.reelColor || '#d4a373';
+        g.beginPath();
+        g.arc(handX + (lookRight ? 4 : -4), handY - 2, 3.2, 0, Math.PI * 2);
+        g.fill();
+
+        // Uç
+        g.fillStyle = rodItem.rodTip || '#ff595e';
+        g.beginPath();
+        g.arc(tipX, tipY, 2.5, 0, Math.PI * 2);
+        g.fill();
+
+        // Efsun Parlaması (+1..+5 Anvil Halesi)
+        const plusCount = Number(rp.rodPlus) || 0;
+        if (plusCount > 0) {
+            const glowColor = plusCount >= 5 ? 'rgba(239, 68, 68, 0.85)' : (plusCount >= 3 ? 'rgba(199, 125, 255, 0.8)' : 'rgba(255, 190, 11, 0.75)');
+            g.strokeStyle = glowColor;
+            g.lineWidth = 1.6 + plusCount * 0.4;
+            g.beginPath();
+            g.arc(tipX, tipY, 4.5 + Math.sin(globalTime * 6) * 1.5, 0, Math.PI * 2);
+            g.stroke();
+        }
+
+        // Silkroad Online SOS (Seal of Star) Parlama ve Yıldız Aura Efekti!
+        if (rp.isSOS || rodItem.isSOS) {
+            g.save();
+            // 1. Neon Aura Çizimi (Camgöbeği & Altın Işıma)
+            g.strokeStyle = 'rgba(0, 245, 212, 0.55)';
+            g.lineWidth = 7.5;
+            g.lineCap = 'round';
+            g.beginPath();
+            g.moveTo(handX - (lookRight ? 2 : -2), handY + 3);
+            g.quadraticCurveTo(handX + (lookRight ? 8 : -8), handY - 12, tipX, tipY);
+            g.stroke();
+
+            g.strokeStyle = 'rgba(255, 209, 102, 0.85)';
+            g.lineWidth = 4.2;
+            g.stroke();
+
+            // 2. Olta ucu etrafında dönen SOS yıldızları
+            const t = globalTime * 4.2;
+            for (let i = 0; i < 3; i++) {
+                const ang = t + (i * Math.PI * 2 / 3);
+                const dist = 6 + Math.sin(t * 1.5 + i) * 2.5;
+                const sx = tipX + Math.cos(ang) * dist;
+                const sy = tipY + Math.sin(ang) * (dist * 0.75);
+                drawSilkroadSparkle(g, sx, sy, 3.6 + Math.sin(t * 3 + i) * 1.2, i % 2 === 0 ? '#ffd166' : '#00f5d4');
+            }
+
+            // 3. Olta gövdesi üzerinde süzülen 2 adet parıldayan yıldız
+            const prog1 = (Math.sin(globalTime * 3) + 1) / 2;
+            const midX1 = (handX - (lookRight ? 2 : -2)) * (1 - prog1) + tipX * prog1;
+            const midY1 = (handY + 3) * (1 - prog1) + tipY * prog1 - (1 - 4 * Math.pow(prog1 - 0.5, 2)) * 6;
+            drawSilkroadSparkle(g, midX1, midY1, 2.8, '#ffffff');
+
+            const prog2 = (Math.cos(globalTime * 2.5) + 1) / 2;
+            const midX2 = (handX - (lookRight ? 2 : -2)) * (1 - prog2) + tipX * prog2;
+            const midY2 = (handY + 3) * (1 - prog2) + tipY * prog2 + (1 - 4 * Math.pow(prog2 - 0.5, 2)) * 4;
+            drawSilkroadSparkle(g, midX2, midY2, 2.2, '#00f5d4');
+
+            g.restore();
+        }
+
+        // Misina Çizimi
+        if (rp.isFishing) {
+            const targetWater = (rp.waterX !== undefined && rp.waterY !== undefined)
+                ? tileToScreen(rp.waterX, rp.waterY)
+                : { x: tipX + (lookRight ? 26 : -26), y: tipY + 42 };
+
+            g.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+            g.lineWidth = 1;
+            g.beginPath();
+            g.moveTo(tipX, tipY);
+            g.quadraticCurveTo((tipX + targetWater.x) / 2, tipY - 6, targetWater.x, targetWater.y);
+            g.stroke();
+
+            // Su yüzeyindeki mantar
+            const bobY = Math.sin(globalTime * 5) * 2;
+            g.fillStyle = '#ef4444';
+            g.beginPath();
+            g.arc(targetWater.x, targetWater.y + bobY, 3, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = '#ffffff';
+            g.beginPath();
+            g.arc(targetWater.x, targetWater.y + bobY - 2, 2, 0, Math.PI * 2);
+            g.fill();
+
+            // Su halkası
+            g.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+            g.lineWidth = 1;
+            g.beginPath();
+            g.ellipse(targetWater.x, targetWater.y + bobY + 2, 6 + Math.sin(globalTime * 3) * 2, 3, 0, 0, Math.PI * 2);
+            g.stroke();
+        } else {
+            // Boşta duran misina
+            g.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            g.lineWidth = 1;
+            g.beginPath();
+            g.moveTo(tipX, tipY);
+            g.lineTo(tipX, tipY + 14);
+            g.stroke();
+        }
     }
 
     // 6. Baş Üstü İsimlik & Seviye & GM Rozeti
@@ -14446,6 +14683,9 @@ function applyLoadedCharacter(c) {
         if (c.guildName) {
             player.guildName = c.guildName;
             SafeStorage.setItem('mmo_player_guild', c.guildName);
+            if (socket && socket.connected) {
+                socket.emit('guild_request_data', { guildName: c.guildName });
+            }
         } else {
             player.guildName = '';
             activeGuild = null;
@@ -14513,18 +14753,39 @@ window.addEventListener('beforeunload', saveCharacterToServer);
 // ============================================================================
 // ÇOK OYUNCULU AĞ (SOCKET.IO) BAĞLANTISI
 // ============================================================================
+function getPlayerEquipmentNetworkData() {
+    const eqRodEntry = getEquippedRodEntry();
+    const rodEnch = eqRodEntry ? getEntryEnchants(eqRodEntry) : (player.equipped.rod ? player.rodEnchants[player.equipped.rod] : null);
+    const eqCostumeEntry = getEquippedCostumeEntry();
+    const costumeEnch = eqCostumeEntry ? getEntryEnchants(eqCostumeEntry) : (player.equipped.costume ? player.costumeEnchants[player.equipped.costume] : null);
+    const rodId = player.equipped ? player.equipped.rod : null;
+    const rodItem = rodId ? ITEMS[rodId] : null;
+    return {
+        rod: rodId,
+        rodPlus: (rodEnch && rodEnch.count) || 0,
+        isSOS: Boolean(rodItem && rodItem.isSOS),
+        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+        costumePlus: (costumeEnch && costumeEnch.count) || 0
+    };
+}
+
 function sendPlayerJoin() {
     if (!socket || !socket.connected) return;
     const charName = player.name || (currentUser ? currentUser.username : '');
     if (!charName) return;
     const cleanMap = normalizeMapId(currentMapId);
+    const equip = getPlayerEquipmentNetworkData();
     socket.emit('player_join', {
         token: authToken,
         charName: charName,
         x: Number(player.x.toFixed(2)),
         y: Number(player.y.toFixed(2)),
         mapId: cleanMap,
-        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+        costume: equip.costume,
+        costumePlus: equip.costumePlus,
+        rod: equip.rod,
+        rodPlus: equip.rodPlus,
+        isSOS: equip.isSOS,
         boatId: (cleanMap === 'akdeniz' || cleanMap === 'kraken') ? player.activeBoatId : null,
         level: player.level || 1,
         guildName: player.guildName || ''
@@ -14534,9 +14795,14 @@ function sendPlayerJoin() {
 
 function syncPlayerProfileToNetwork() {
     if (!socket || !socket.connected) return;
+    const equip = getPlayerEquipmentNetworkData();
     socket.emit('player_update_profile', {
         guildName: player.guildName || '',
-        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+        costume: equip.costume,
+        costumePlus: equip.costumePlus,
+        rod: equip.rod,
+        rodPlus: equip.rodPlus,
+        isSOS: equip.isSOS,
         level: player.level || 1,
         boatId: player.activeBoatId || null
     });
@@ -14568,6 +14834,9 @@ function initSocketConnection() {
         socket.on('connect', () => {
             console.log('⚡ Socket bağlantısı kuruldu. Socket ID:', socket.id);
             sendPlayerJoin();
+            if (player.guildName) {
+                socket.emit('guild_request_data', { guildName: player.guildName });
+            }
         });
 
         socket.on('map_peers', (peers) => {
@@ -14598,10 +14867,24 @@ function initSocketConnection() {
 
         socket.on('player_profile_updated', (data) => {
             if (data && data.socketId && remotePlayers[data.socketId]) {
-                if (data.guildName !== undefined) remotePlayers[data.socketId].guildName = data.guildName;
-                if (data.costume !== undefined) remotePlayers[data.socketId].costume = data.costume;
-                if (data.level !== undefined) remotePlayers[data.socketId].level = data.level;
-                if (data.boatId !== undefined) remotePlayers[data.socketId].boatId = data.boatId;
+                const rp = remotePlayers[data.socketId];
+                if (data.guildName !== undefined) rp.guildName = data.guildName;
+                if (data.costume !== undefined) rp.costume = data.costume;
+                if (data.costumePlus !== undefined) rp.costumePlus = Number(data.costumePlus) || 0;
+                if (data.rod !== undefined) rp.rod = data.rod;
+                if (data.rodPlus !== undefined) rp.rodPlus = Number(data.rodPlus) || 0;
+                if (data.isSOS !== undefined) rp.isSOS = Boolean(data.isSOS);
+                if (data.level !== undefined) rp.level = data.level;
+                if (data.boatId !== undefined) rp.boatId = data.boatId;
+            }
+        });
+
+        socket.on('player_fishing_state', (data) => {
+            if (data && data.socketId && remotePlayers[data.socketId]) {
+                const rp = remotePlayers[data.socketId];
+                rp.isFishing = Boolean(data.isFishing);
+                rp.waterX = data.waterX;
+                rp.waterY = data.waterY;
             }
         });
 
@@ -14708,8 +14991,10 @@ function initSocketConnection() {
             if (!guild) return;
             const currentName = (activeGuild && activeGuild.name) || player.guildName || '';
             if (currentName && guild.name && currentName.toLowerCase() === guild.name.toLowerCase()) {
-                activeGuild = guild;
+                activeGuild = sanitizeActiveGuild(guild);
                 saveGuildData();
+                renderBuffBar();
+                if (typeof updateExpHUD === 'function') updateExpHUD();
                 const gModal = document.getElementById('guild-modal');
                 if (gModal && !gModal.classList.contains('hidden')) {
                     renderGuildWindow();
