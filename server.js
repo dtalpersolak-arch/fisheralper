@@ -288,9 +288,106 @@ const DB = {
     async getMarketListings() {
         if (dbMode === 'postgres') {
             const res = await pgPool.query('SELECT * FROM market_listings ORDER BY created_at DESC');
-            return res.rows.map(r => ({ id: r.id, userId: r.user_id, ...r.data }));
+            return res.rows
+                .map(r => ({ id: r.id, userId: r.user_id, ...r.data }))
+                .filter(item => item && (!item.id || (!item.id.startsWith('list_seed_') && item.isPlayerListing !== false)));
         } else {
-            return jsonDb.marketListings || [];
+            return (jsonDb.marketListings || []).filter(item => item && (!item.id || (!item.id.startsWith('list_seed_') && item.isPlayerListing !== false)));
+        }
+    },
+
+    async addMarketListing(item) {
+        if (dbMode === 'postgres') {
+            await pgPool.query(
+                'INSERT INTO market_listings (id, user_id, data) VALUES ($1, $2, $3)',
+                [item.id, item.sellerUserId || null, JSON.stringify(item)]
+            );
+        } else {
+            if (!jsonDb.marketListings) jsonDb.marketListings = [];
+            // Demo eşyaları temizle ve yeniyi ekle
+            jsonDb.marketListings = jsonDb.marketListings.filter(l => !l.id || (!l.id.startsWith('list_seed_') && l.isPlayerListing !== false));
+            jsonDb.marketListings.unshift(item);
+            saveJsonDb();
+        }
+    },
+
+    async removeMarketListing(listingId) {
+        if (dbMode === 'postgres') {
+            await pgPool.query('DELETE FROM market_listings WHERE id = $1', [listingId]);
+        } else {
+            if (!jsonDb.marketListings) jsonDb.marketListings = [];
+            jsonDb.marketListings = jsonDb.marketListings.filter(l => l.id !== listingId);
+            saveJsonDb();
+        }
+    },
+
+    async findMarketListing(listingId) {
+        const all = await this.getMarketListings();
+        return all.find(l => l.id === listingId) || null;
+    },
+
+    async getAllGuilds() {
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query("SELECT value FROM game_configs WHERE key = 'guilds'");
+            return res.rows[0]?.value || {};
+        } else {
+            return jsonDb.guilds || {};
+        }
+    },
+
+    async getGuild(name) {
+        const all = await this.getAllGuilds();
+        return all[name] || null;
+    },
+
+    async saveGuild(name, guildData) {
+        if (dbMode === 'postgres') {
+            const current = await this.getAllGuilds();
+            current[name] = guildData;
+            await pgPool.query(
+                "INSERT INTO game_configs (key, value) VALUES ('guilds', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+                [JSON.stringify(current)]
+            );
+        } else {
+            if (!jsonDb.guilds) jsonDb.guilds = {};
+            jsonDb.guilds[name] = guildData;
+            saveJsonDb(true);
+        }
+    },
+
+    async deleteGuild(name) {
+        if (dbMode === 'postgres') {
+            const current = await this.getAllGuilds();
+            delete current[name];
+            await pgPool.query(
+                "INSERT INTO game_configs (key, value) VALUES ('guilds', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+                [JSON.stringify(current)]
+            );
+        } else {
+            if (!jsonDb.guilds) jsonDb.guilds = {};
+            delete jsonDb.guilds[name];
+            saveJsonDb(true);
+        }
+    },
+
+    async updateCharacterGold(charName, goldDelta) {
+        if (!charName || !goldDelta) return;
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query('SELECT user_id, data FROM characters WHERE LOWER(name) = $1 LIMIT 1', [charName.toLowerCase()]);
+            if (res.rows.length > 0) {
+                const row = res.rows[0];
+                const charData = row.data;
+                charData.gold = Math.max(0, (charData.gold || 0) + goldDelta);
+                await pgPool.query('UPDATE characters SET data = $1, updated_at = NOW() WHERE user_id = $2', [JSON.stringify(charData), row.user_id]);
+            }
+        } else {
+            for (const [uId, char] of Object.entries(jsonDb.characters)) {
+                if (char && char.name && char.name.toLowerCase() === charName.toLowerCase()) {
+                    char.gold = Math.max(0, (char.gold || 0) + goldDelta);
+                    saveJsonDb(true);
+                    break;
+                }
+            }
         }
     },
 
@@ -570,13 +667,49 @@ app.post('/api/character/save', authMiddleware, async (req, res) => {
     }
 });
 
-// 6. DÖRTYOL PAZAR YERİ LİSTELEME
+// 6. DÖRTYOL PAZAR YERİ LİSTELEME & İŞLEMLER
 app.get('/api/market', async (req, res) => {
     try {
         const listings = await DB.getMarketListings();
         res.json({ success: true, listings });
     } catch (err) {
         res.status(500).json({ success: false, listings: [] });
+    }
+});
+
+app.post('/api/market/add', authMiddleware, async (req, res) => {
+    try {
+        const listing = req.body;
+        if (!listing || !listing.id || !listing.itemId || !listing.totalPrice) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ilan verisi.' });
+        }
+        listing.sellerUserId = req.user.id;
+        listing.sellerName = req.user.username;
+        listing.isPlayerListing = true;
+        await DB.addMarketListing(listing);
+        io.emit('market_listing_added', listing);
+        res.json({ success: true, listing });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'İlan pazara eklenemedi.' });
+    }
+});
+
+// 7. LONCA LİSTESİ API
+app.get('/api/guilds', async (req, res) => {
+    try {
+        const allGuilds = await DB.getAllGuilds();
+        const list = Object.values(allGuilds).map(g => ({
+            name: g.name,
+            leader: g.leader,
+            level: g.level || 1,
+            exp: g.exp || 0,
+            createdDate: g.createdDate || '',
+            memberCount: (g.members || []).length,
+            applicationCount: (g.applications || []).length
+        }));
+        res.json({ success: true, guilds: list });
+    } catch (err) {
+        res.status(500).json({ success: false, guilds: [] });
     }
 });
 
@@ -676,6 +809,7 @@ io.on('connection', (socket) => {
         p.isMoving = Boolean(data.isMoving);
         if (data.costume) p.costume = data.costume;
         if (data.boatId !== undefined) p.boatId = data.boatId;
+        if (data.guildName !== undefined) p.guildName = data.guildName;
 
         socket.to(`map_${p.mapId}`).emit('player_moved', {
             socketId: socket.id,
@@ -685,8 +819,238 @@ io.on('connection', (socket) => {
             dirY: p.dirY,
             isMoving: p.isMoving,
             costume: p.costume,
+            boatId: p.boatId,
+            guildName: p.guildName
+        });
+    });
+
+    // 2.1 Oyuncu Profil Güncellemesi (Lonca, Kostüm, Seviye)
+    socket.on('player_update_profile', (data) => {
+        const p = onlinePlayers[socket.id];
+        if (!p) return;
+        if (data.guildName !== undefined) p.guildName = data.guildName;
+        if (data.costume !== undefined) p.costume = data.costume;
+        if (data.level !== undefined) p.level = data.level;
+        if (data.boatId !== undefined) p.boatId = data.boatId;
+
+        socket.to(`map_${p.mapId}`).emit('player_profile_updated', {
+            socketId: socket.id,
+            guildName: p.guildName,
+            costume: p.costume,
+            level: p.level,
             boatId: p.boatId
         });
+    });
+
+    // ========================================================================
+    // PAZAR / AUCTION HOUSE CANLI SENKRONİZASYONU
+    // ========================================================================
+    socket.on('market_get_listings', async () => {
+        const listings = await DB.getMarketListings();
+        socket.emit('market_sync', listings);
+    });
+
+    socket.on('market_add_listing', async (listing) => {
+        if (!listing || !listing.id) return;
+        listing.isPlayerListing = true;
+        await DB.addMarketListing(listing);
+        io.emit('market_listing_added', listing);
+    });
+
+    socket.on('market_buy_listing', async (data) => {
+        const { listingId, buyerName } = data || {};
+        if (!listingId) return;
+
+        const listing = await DB.findMarketListing(listingId);
+        if (!listing) {
+            socket.emit('market_buy_error', { message: 'Bu ilan başka bir oyuncu tarafından satın alınmış veya kaldırılmış!' });
+            return;
+        }
+
+        await DB.removeMarketListing(listingId);
+        io.emit('market_listing_removed', listingId);
+
+        // Satıcıya altın aktarımı ve bildirim
+        if (listing.sellerName) {
+            await DB.updateCharacterGold(listing.sellerName, listing.totalPrice);
+            // Satıcı şu an online mı?
+            const sellerSocketEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name === listing.sellerName);
+            if (sellerSocketEntry) {
+                io.to(sellerSocketEntry[0]).emit('market_item_sold', {
+                    itemId: listing.itemId,
+                    count: listing.count,
+                    totalPrice: listing.totalPrice,
+                    buyerName: buyerName || 'Bir Oyuncu'
+                });
+            }
+        }
+
+        socket.emit('market_buy_success', { listingId, listing });
+    });
+
+    socket.on('market_cancel_listing', async (data) => {
+        const { listingId, sellerName } = data || {};
+        if (!listingId) return;
+        const listing = await DB.findMarketListing(listingId);
+        if (!listing) return;
+
+        await DB.removeMarketListing(listingId);
+        io.emit('market_listing_removed', listingId);
+        socket.emit('market_cancel_success', { listingId, listing });
+    });
+
+    // ========================================================================
+    // LONCA SİSTEMİ & BAŞVURU SENKRONİZASYONU
+    // ========================================================================
+    socket.on('guild_get_list', async () => {
+        const allGuilds = await DB.getAllGuilds();
+        const list = Object.values(allGuilds).map(g => ({
+            name: g.name,
+            leader: g.leader,
+            level: g.level || 1,
+            exp: g.exp || 0,
+            createdDate: g.createdDate || '',
+            members: g.members || [],
+            applications: g.applications || []
+        }));
+        socket.emit('guild_list_response', list);
+    });
+
+    socket.on('guild_create', async (guildData) => {
+        if (!guildData || !guildData.name) return;
+        guildData.applications = guildData.applications || [];
+        await DB.saveGuild(guildData.name, guildData);
+
+        const p = onlinePlayers[socket.id];
+        if (p) {
+            p.guildName = guildData.name;
+            socket.to(`map_${p.mapId}`).emit('player_profile_updated', {
+                socketId: socket.id,
+                guildName: p.guildName
+            });
+        }
+        io.emit('guild_list_updated');
+    });
+
+    socket.on('guild_apply', async (data) => {
+        const { guildName, applicantName, applicantLevel } = data || {};
+        if (!guildName || !applicantName) return;
+
+        const guild = await DB.getGuild(guildName);
+        if (!guild) {
+            socket.emit('guild_apply_error', { message: 'Lonca bulunamadı!' });
+            return;
+        }
+
+        guild.applications = guild.applications || [];
+        const alreadyApplied = guild.applications.some(a => a.name.toLowerCase() === applicantName.toLowerCase());
+        const alreadyMember = (guild.members || []).some(m => m.name.toLowerCase() === applicantName.toLowerCase());
+
+        if (alreadyApplied) {
+            socket.emit('guild_apply_error', { message: 'Bu loncaya zaten başvurunuz bulunuyor!' });
+            return;
+        }
+        if (alreadyMember) {
+            socket.emit('guild_apply_error', { message: 'Zaten bu loncanın üyesisiniz!' });
+            return;
+        }
+
+        const newApp = {
+            name: applicantName,
+            level: applicantLevel || 1,
+            date: new Date().toLocaleDateString('tr-TR')
+        };
+        guild.applications.push(newApp);
+        await DB.saveGuild(guildName, guild);
+
+        socket.emit('guild_apply_success', { guildName, application: newApp });
+
+        // Lidere anlık bildirim (Online ise)
+        const leaderEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name === guild.leader);
+        if (leaderEntry) {
+            io.to(leaderEntry[0]).emit('guild_new_application', {
+                guildName,
+                applicant: newApp,
+                applications: guild.applications
+            });
+        }
+    });
+
+    socket.on('guild_approve_applicant', async (data) => {
+        const { guildName, applicantName } = data || {};
+        if (!guildName || !applicantName) return;
+
+        const guild = await DB.getGuild(guildName);
+        if (!guild) return;
+
+        guild.applications = (guild.applications || []).filter(a => a.name.toLowerCase() !== applicantName.toLowerCase());
+        guild.members = guild.members || [];
+        if (!guild.members.some(m => m.name.toLowerCase() === applicantName.toLowerCase())) {
+            guild.members.push({
+                name: applicantName,
+                level: 1,
+                role: 'Üye',
+                online: true
+            });
+        }
+        await DB.saveGuild(guildName, guild);
+
+        // Lidere güncel lonca verisini gönder
+        socket.emit('guild_data_updated', guild);
+
+        // Başvuran oyuncu online ise ona katılma müjdesini ver
+        const appEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name.toLowerCase() === applicantName.toLowerCase());
+        if (appEntry) {
+            const appSocketId = appEntry[0];
+            onlinePlayers[appSocketId].guildName = guildName;
+            io.to(appSocketId).emit('guild_application_approved', {
+                guildName,
+                guild
+            });
+            socket.to(`map_${onlinePlayers[appSocketId].mapId}`).emit('player_profile_updated', {
+                socketId: appSocketId,
+                guildName: guildName
+            });
+        }
+    });
+
+    socket.on('guild_reject_applicant', async (data) => {
+        const { guildName, applicantName } = data || {};
+        if (!guildName || !applicantName) return;
+
+        const guild = await DB.getGuild(guildName);
+        if (!guild) return;
+
+        guild.applications = (guild.applications || []).filter(a => a.name.toLowerCase() !== applicantName.toLowerCase());
+        await DB.saveGuild(guildName, guild);
+
+        socket.emit('guild_data_updated', guild);
+
+        const appEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name.toLowerCase() === applicantName.toLowerCase());
+        if (appEntry) {
+            io.to(appEntry[0]).emit('guild_application_rejected', { guildName });
+        }
+    });
+
+    socket.on('guild_leave', async (data) => {
+        const { guildName, memberName } = data || {};
+        const p = onlinePlayers[socket.id];
+        const nameToLeave = memberName || (p ? p.name : '');
+        if (!guildName || !nameToLeave) return;
+
+        const guild = await DB.getGuild(guildName);
+        if (guild && guild.members) {
+            guild.members = guild.members.filter(m => m.name.toLowerCase() !== nameToLeave.toLowerCase());
+            await DB.saveGuild(guildName, guild);
+        }
+
+        if (p) {
+            p.guildName = '';
+            socket.to(`map_${p.mapId}`).emit('player_profile_updated', {
+                socketId: socket.id,
+                guildName: ''
+            });
+        }
     });
 
     // 3. Harita Değiştirme (Işınlanma)

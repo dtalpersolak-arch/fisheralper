@@ -4223,93 +4223,54 @@ let marketSelectedSellIndex = null;
 let marketSellCount = 1;
 let marketSellPrice = 100;
 
-const DEFAULT_MARKET_LISTINGS = [
-    {
-        id: 'list_seed_1',
-        sellerName: 'Balıkçı Kenan',
-        isPlayerListing: false,
-        itemId: 'fish_carp',
-        count: 5,
-        pricePerUnit: 35,
-        totalPrice: 175,
-        createdAt: Date.now() - 3600000,
-        enchants: null
-    },
-    {
-        id: 'list_seed_2',
-        sellerName: 'Kaptan Levent',
-        isPlayerListing: false,
-        itemId: 'rod_oak',
-        count: 1,
-        pricePerUnit: 450,
-        totalPrice: 450,
-        createdAt: Date.now() - 7200000,
-        enchants: { count: 2, luck: 4, speed: 4, control: 2 }
-    },
-    {
-        id: 'list_seed_3',
-        sellerName: 'Tüccar Selami',
-        isPlayerListing: false,
-        itemId: 'item_pearl',
-        count: 2,
-        pricePerUnit: 850,
-        totalPrice: 1700,
-        createdAt: Date.now() - 10800000,
-        enchants: null
-    },
-    {
-        id: 'list_seed_4',
-        sellerName: 'Dalgıç Murat',
-        isPlayerListing: false,
-        itemId: 'bait_squid',
-        count: 15,
-        pricePerUnit: 15,
-        totalPrice: 225,
-        createdAt: Date.now() - 5400000,
-        enchants: null
-    },
-    {
-        id: 'list_seed_5',
-        sellerName: 'Simyacı Çırağı',
-        isPlayerListing: false,
-        itemId: 'scroll_basic',
-        count: 3,
-        pricePerUnit: 300,
-        totalPrice: 900,
-        createdAt: Date.now() - 1800000,
-        enchants: null
-    },
-    {
-        id: 'list_seed_6',
-        sellerName: 'Eski Denizci',
-        isPlayerListing: false,
-        itemId: 'costume_sea_dog',
-        count: 1,
-        pricePerUnit: 2200,
-        totalPrice: 2200,
-        createdAt: Date.now() - 14400000,
-        enchants: { count: 1, luck: 2, speed: 2, control: 0 }
-    }
-];
+const DEFAULT_MARKET_LISTINGS = [];
 
 let marketListings = (() => {
     try {
         const raw = localStorage.getItem('mmo_market_listings');
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed)) {
+                // Demo / Seed itemleri tamamen temizle
+                return parsed.filter(l => l && (!l.id || (!l.id.startsWith('list_seed_') && l.isPlayerListing !== false)));
+            }
         }
     } catch (e) {}
-    return [...DEFAULT_MARKET_LISTINGS];
+    return [];
 })();
+
+async function fetchMarketListingsFromServer(containerToRerender = null) {
+    if (!serverOnline) return;
+    try {
+        const res = await fetch(getServerApiUrl('/api/market'), { method: 'GET', cache: 'no-cache' });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && Array.isArray(data.listings)) {
+                // Yalnızca gerçek oyuncu ilanlarını tut
+                marketListings = data.listings.filter(l => l && (!l.id || (!l.id.startsWith('list_seed_') && l.isPlayerListing !== false)));
+                saveMarketData();
+                if (containerToRerender) {
+                    renderMarketModal(containerToRerender, false);
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Pazar verisi sunucudan çekilemedi:', err);
+    }
+}
 
 function saveMarketData() {
     try {
-        localStorage.setItem('mmo_market_listings', JSON.stringify(marketListings));
+        // Yalnızca demo olmayan ilanları kaydet
+        const cleanList = (marketListings || []).filter(l => l && (!l.id || (!l.id.startsWith('list_seed_') && l.isPlayerListing !== false)));
+        localStorage.setItem('mmo_market_listings', JSON.stringify(cleanList));
     } catch (e) {}
 }
 
-function renderMarketModal(container) {
+function renderMarketModal(container, fetchRemote = true) {
+    if (fetchRemote) {
+        fetchMarketListingsFromServer(container);
+    }
     container.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;">
             <div class="tab-group market-header-tabs">
@@ -4525,8 +4486,11 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
                     if (addItemToInventory(l.itemId, l.count, l.enchants || null)) {
                         marketListings = marketListings.filter(item => item.id !== l.id);
                         saveMarketData();
+                        if (socket && socket.connected) {
+                            socket.emit('market_cancel_listing', { listingId: l.id, sellerName: player.name });
+                        }
                         showToast(`📦 [${it.name}${plusStr}] ilanı pazardan kaldırıldı ve çantana iade edildi.`, '#4cc9f0');
-                        renderMarketModal(mainContainer);
+                        renderMarketModal(mainContainer, false);
                     } else {
                         showToast('⚠️ Eşya çantaya aktarılamadı!', '#ff595e');
                     }
@@ -4547,9 +4511,13 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
                     marketListings = marketListings.filter(item => item.id !== l.id);
                     saveMarketData();
                     updateExpHUD();
+                    if (socket && socket.connected) {
+                        socket.emit('market_buy_listing', { listingId: l.id, buyerName: player.name });
+                    }
+                    saveCharacterToServer();
                     showToast(`🎉 [${it.name}${plusStr} x${l.count}] pazardan ${l.totalPrice} altına satın alındı!`, '#52b788');
                     addChatMessage('Pazar', `Pazardan [${it.name}${plusStr} x${l.count}] satın aldın (-${l.totalPrice} Altın).`, 'system');
-                    renderMarketModal(mainContainer);
+                    renderMarketModal(mainContainer, false);
                 }
             };
         }
@@ -4813,12 +4781,16 @@ function renderMarketSellTab(tabContainer, mainContainer) {
 
         marketListings.unshift(newListing);
         saveMarketData();
+        if (socket && socket.connected) {
+            socket.emit('market_add_listing', newListing);
+        }
         marketSelectedSellIndex = null;
+        saveCharacterToServer();
         showToast(`🏷️ [${it.name}${plusStr} x${countToList}] ${newListing.totalPrice} altın fiyatla pazara eklendi!`, '#ffd166');
         addChatMessage('Pazar', `Pazara yeni bir ilan verdin: [${it.name}${plusStr} x${countToList}] (${newListing.totalPrice} Altın)`, 'system');
 
         marketActiveTab = 'buy';
-        renderMarketModal(mainContainer);
+        renderMarketModal(mainContainer, false);
     };
 }
 
@@ -7146,14 +7118,15 @@ function createGuild(rawName) {
         vault: [new Array(24).fill(null), new Array(24).fill(null)],
         activeVaultPage: 0,
         members: [
-            { name: player.name || 'Oyuncu', level: player.level || 1, role: 'Lider', online: true, isPlayer: true },
-            { name: 'Kuzeyli Balıkçı', level: 14, role: 'Subay', online: true },
-            { name: 'Deniz Gözcüsü Ege', level: 9, role: 'Üye', online: false },
-            { name: 'Fırtına Reis', level: 18, role: 'Kıdemli Üye', online: true },
-            { name: 'Gümüşkanca', level: 6, role: 'Çırak', online: false }
-        ]
+            { name: player.name || 'Oyuncu', level: player.level || 1, role: 'Lider', online: true, isPlayer: true }
+        ],
+        applications: []
     };
     saveGuildData();
+    if (socket && socket.connected) {
+        socket.emit('guild_create', activeGuild);
+    }
+    syncPlayerProfileToNetwork();
     showToast(`🏛️ "${name}" loncası başarıyla kuruldu!`, '#ffd166');
     addChatMessage('Lonca', `Tebrikler! "${name}" loncasını kurdun. Artık bir Lonca Liderisin!`, 'system');
     return true;
@@ -7166,6 +7139,10 @@ function leaveGuild() {
         player.guildName = '';
         activeGuild = null;
         saveGuildData();
+        if (socket && socket.connected) {
+            socket.emit('guild_leave', { guildName: oldName, memberName: player.name });
+        }
+        syncPlayerProfileToNetwork();
         showToast(`🚪 "${oldName}" loncasından ayrıldın.`, '#adb5bd');
         addChatMessage('Lonca', `"${oldName}" loncasından ayrıldın.`, 'system');
         const npcModal = document.getElementById('npc-modal');
@@ -7179,31 +7156,136 @@ function leaveGuild() {
     }
 }
 
+let npcGuildTab = 'create'; // 'create' | 'find'
+let cachedGuildList = [];
+
+async function fetchAvailableGuilds(onDone) {
+    if (serverOnline) {
+        try {
+            const res = await fetch(getServerApiUrl('/api/guilds'), { method: 'GET', cache: 'no-cache' });
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.success && Array.isArray(data.guilds)) {
+                    cachedGuildList = data.guilds;
+                    if (onDone) onDone();
+                    return;
+                }
+            }
+        } catch (e) {}
+    }
+    if (socket && socket.connected) {
+        socket.emit('guild_get_list');
+    }
+    if (onDone) onDone();
+}
+
 // Lonca Lideri NPC Modal Görünümü
 function renderGuildNPCModal(container) {
     if (!player.guildName || !activeGuild) {
-        // Lonca Kurma Ekranı
+        // Lonca Kurma veya Lonca Bul & Başvur Ekranı
+        let appliedList = [];
+        try {
+            appliedList = JSON.parse(localStorage.getItem('mmo_applied_guilds') || '[]');
+        } catch(e) {}
+
+        const guildCardsHtml = (cachedGuildList || []).map(g => {
+            const hasApplied = (g.applications && g.applications.some(a => a.name.toLowerCase() === (player.name || '').toLowerCase())) || (appliedList.includes(g.name));
+            return `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(14,20,32,0.8); border:1px solid rgba(200,155,110,0.25); border-radius:10px; padding:12px 16px;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:24px;">🏛️</span>
+                        <div>
+                            <div style="font-size:15px; font-weight:800; color:#ffd166;">⟨ ${g.name} ⟩</div>
+                            <div style="font-size:12px; color:#adb5bd; margin-top:2px;">
+                                👑 Lider: <b>${g.leader}</b> • Seviye: <b style="color:#80ed99;">Lv. ${g.level || 1}</b> • Üyeler: <b>${g.memberCount || 1} / 30</b>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        ${hasApplied ? `
+                            <button class="action-btn" disabled style="background:rgba(255,209,102,0.15); color:#ffd166; border:1px solid #ffd166; font-size:12px; padding:6px 14px;">
+                                ⏳ Başvuruldu (Onay Bekleniyor)
+                            </button>
+                        ` : `
+                            <button class="action-btn success" id="btn-apply-g-${g.name}" style="padding:6px 16px; font-size:13px; font-weight:700;">
+                                ✉️ Başvur
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
         container.innerHTML = `
-            <div class="guild-unregistered-box" style="margin-bottom: 0;">
-                <div class="guild-crest-big">🏛️</div>
-                <h3>Dörtyol Lonca Karargâhı</h3>
-                <p>Dörtyol'un kalbinde kendi loncanı kur! Dostlarını bir araya topla, balık tuttukça seviye atlayarak ortak yetenekleri aç, 48 slotluk devasa kasayı kullan ve adının hemen üstünde parlayan koyu sarı unvanla tanın.</p>
-                
-                <div style="max-width: 440px; margin: 0 auto 20px auto; display: flex; flex-direction: column; gap: 10px;">
-                    <input type="text" id="npc-guild-create-input" class="char-name-input" placeholder="Lonca Adını Yazın (3-18 Harf)" maxlength="18" style="text-align: center; font-size: 15px; font-weight: 700; color: #ffd166;" />
-                    <button class="primary-btn" id="npc-guild-create-btn" style="padding: 12px; font-size: 15px; font-weight: 800; background: linear-gradient(135deg, #e5a93c, #b37400); color: #000; border: none; box-shadow: 0 4px 15px rgba(229,169,60,0.4);">
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <!-- Sekmeler: Lonca Oluştur / Lonca Bul -->
+                <div style="display: flex; justify-content: center; gap: 12px; border-bottom: 1px solid rgba(200, 155, 110, 0.25); padding-bottom: 12px;">
+                    <button class="tab-btn ${npcGuildTab === 'create' ? 'active' : ''}" id="npc-gtab-create" style="padding: 8px 20px; font-weight: 700;">
                         🏛️ Lonca Oluştur
+                    </button>
+                    <button class="tab-btn ${npcGuildTab === 'find' ? 'active' : ''}" id="npc-gtab-find" style="padding: 8px 20px; font-weight: 700;">
+                        🔍 Lonca Bul & Başvur (${cachedGuildList.length})
                     </button>
                 </div>
 
-                <div class="guild-perks-list">
-                    <div class="guild-perk-item">👑 Kafanızın hemen üzerinde <b>Koyu Sarı</b> lonca unvanı</div>
-                    <div class="guild-perk-item">🌟 <b>1-10 Seviye & Yetenek Ağacı</b>: Balık tuttukça EXP kazanıp ortak pasifleri güçlendir</div>
-                    <div class="guild-perk-item">🏦 <b>48 Slottan</b> oluşan ortak Lonca Kasası (Banka)</div>
-                    <div class="guild-perk-item">👥 <b>[G]</b> tuşu ile yetenek paneli, üye listesi ve çevrimiçi durumu takibi</div>
-                </div>
+                ${npcGuildTab === 'create' ? `
+                    <div class="guild-unregistered-box" style="margin-bottom: 0;">
+                        <div class="guild-crest-big">🏛️</div>
+                        <h3>Dörtyol Lonca Karargâhı</h3>
+                        <p>Dörtyol'un kalbinde kendi loncanı kur! Dostlarını bir araya topla, balık tuttukça seviye atlayarak ortak yetenekleri aç, 48 slotluk devasa kasayı kullan ve adının hemen üstünde parlayan koyu sarı unvanla tanın.</p>
+                        
+                        <div style="max-width: 440px; margin: 0 auto 20px auto; display: flex; flex-direction: column; gap: 10px;">
+                            <input type="text" id="npc-guild-create-input" class="char-name-input" placeholder="Lonca Adını Yazın (3-18 Harf)" maxlength="18" style="text-align: center; font-size: 15px; font-weight: 700; color: #ffd166;" />
+                            <button class="primary-btn" id="npc-guild-create-btn" style="padding: 12px; font-size: 15px; font-weight: 800; background: linear-gradient(135deg, #e5a93c, #b37400); color: #000; border: none; box-shadow: 0 4px 15px rgba(229,169,60,0.4);">
+                                🏛️ Lonca Oluştur
+                            </button>
+                        </div>
+
+                        <div class="guild-perks-list">
+                            <div class="guild-perk-item">👑 Kafanızın hemen üzerinde <b>Koyu Sarı</b> lonca unvanı</div>
+                            <div class="guild-perk-item">🌟 <b>1-10 Seviye & Yetenek Ağacı</b>: Balık tuttukça EXP kazanıp ortak pasifleri güçlendir</div>
+                            <div class="guild-perk-item">🏦 <b>48 Slottan</b> oluşan ortak Lonca Kasası (Banka)</div>
+                            <div class="guild-perk-item">👥 <b>[G]</b> tuşu ile yetenek paneli, üye listesi ve üyelik başvurusu yönetimi</div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="guild-members-wrap" style="padding: 16px;">
+                        <div class="guild-table-header" style="margin-bottom: 12px;">
+                            <h3 style="margin: 0; color: #ffd166; font-size: 15px;">🔍 Mevcut Kurulmuş Loncalar</h3>
+                            <span style="font-size: 12px; color: #adb5bd;">Toplam ${cachedGuildList.length} Lonca Bulundu</span>
+                        </div>
+
+                        ${cachedGuildList.length === 0 ? `
+                            <div style="padding: 30px; text-align: center; color: #adb5bd;">
+                                <div style="font-size: 32px; margin-bottom: 8px;">🏛️</div>
+                                Henüz sunucuda kurulmuş bir lonca bulunmuyor.<br>İlk loncayı sen kurup lideri olabilirsin!
+                            </div>
+                        ` : `
+                            <div style="display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
+                                ${guildCardsHtml}
+                            </div>
+                        `}
+                    </div>
+                `}
             </div>
         `;
+
+        const tabCreate = document.getElementById('npc-gtab-create');
+        const tabFind = document.getElementById('npc-gtab-find');
+        if (tabCreate) {
+            tabCreate.onclick = () => {
+                npcGuildTab = 'create';
+                renderGuildNPCModal(container);
+            };
+        }
+        if (tabFind) {
+            tabFind.onclick = () => {
+                npcGuildTab = 'find';
+                fetchAvailableGuilds(() => {
+                    renderGuildNPCModal(container);
+                });
+            };
+        }
 
         const inputEl = document.getElementById('npc-guild-create-input');
         const createBtn = document.getElementById('npc-guild-create-btn');
@@ -7224,6 +7306,30 @@ function renderGuildNPCModal(container) {
                 }
             };
         }
+
+        // Lonca Başvuru Butonları
+        (cachedGuildList || []).forEach(g => {
+            const applyBtn = document.getElementById(`btn-apply-g-${g.name}`);
+            if (applyBtn) {
+                applyBtn.onclick = () => {
+                    if (socket && socket.connected) {
+                        socket.emit('guild_apply', {
+                            guildName: g.name,
+                            applicantName: player.name || 'Oyuncu',
+                            applicantLevel: player.level || 1
+                        });
+                    }
+                    try {
+                        const cur = JSON.parse(localStorage.getItem('mmo_applied_guilds') || '[]');
+                        if (!cur.includes(g.name)) cur.push(g.name);
+                        localStorage.setItem('mmo_applied_guilds', JSON.stringify(cur));
+                    } catch(e) {}
+                    showToast(`✉️ "${g.name}" loncasına başvurunuz iletildi! Lonca Lideri onayladığında loncaya katılacaksınız.`, '#80ed99');
+                    addChatMessage('Lonca', `"${g.name}" loncasına üyelik başvurusu yaptın.`, 'system');
+                    renderGuildNPCModal(container);
+                };
+            }
+        });
     } else {
         // Lonca Üyesi / Lideri Ekranı: 2 Seçenek (Lonca Kasası & Lonca'dan Ayrıl)
         if (activeGuild.members && activeGuild.members.length > 0) {
@@ -7853,6 +7959,30 @@ function renderGuildWindow() {
         `;
     }).join('');
 
+    // Bekleyen Başvurular HTML'i (Yalnızca Lonca Lideri)
+    const appList = activeGuild.applications || [];
+    const appCount = appList.length;
+    const appRows = appList.map(app => {
+        return `
+            <tr>
+                <td style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">👤</span>
+                    <b style="color:#ffd166; font-size:14px;">${app.name}</b>
+                </td>
+                <td><b style="color:#80ed99;">Lv. ${app.level || 1}</b></td>
+                <td><span style="color:#adb5bd; font-size:12px;">${app.date || 'Bugün'}</span></td>
+                <td style="text-align: right;">
+                    <button class="action-btn success" id="btn-approve-app-${app.name}" style="padding:5px 12px; font-size:12px; margin-right:6px; font-weight:700;">
+                        ✅ Onayla
+                    </button>
+                    <button class="action-btn danger-btn" id="btn-reject-app-${app.name}" style="padding:5px 10px; font-size:12px;">
+                        ❌ Reddet
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
     content.innerHTML = `
         <div class="guild-banner-card">
             <div class="guild-banner-left">
@@ -7883,7 +8013,7 @@ function renderGuildWindow() {
             </div>
         </div>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(200, 155, 110, 0.25); padding-bottom:10px; margin-top:-4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(200, 155, 110, 0.25); padding-bottom:10px; margin-top:-4px; flex-wrap:wrap; gap:8px;">
             <div class="tab-group">
                 <button class="tab-btn ${activeGuildTab === 'skills' ? 'active' : ''}" id="tab-g-skills" style="padding:8px 16px; font-weight:700;">
                     🌟 Lonca Yetenek Ağacı
@@ -7891,6 +8021,11 @@ function renderGuildWindow() {
                 <button class="tab-btn ${activeGuildTab === 'members' ? 'active' : ''}" id="tab-g-members" style="padding:8px 16px; font-weight:700;">
                     👥 Lonca Üyeleri (${activeGuild.members.length})
                 </button>
+                ${isLeader ? `
+                <button class="tab-btn ${activeGuildTab === 'apps' ? 'active' : ''}" id="tab-g-apps" style="padding:8px 16px; font-weight:700; ${appCount > 0 ? 'border-color:#ffd166; color:#ffd166;' : ''}">
+                    📬 Başvurular ${appCount > 0 ? `<span style="background:#e63946; color:#fff; border-radius:10px; padding:1px 6px; font-size:11px; margin-left:4px;">${appCount}</span>` : ''}
+                </button>
+                ` : ''}
             </div>
             <div style="font-size:11.5px; color:#adb5bd;">
                 🐟 Balık EXP: Sıradan %1 • Gelişmiş %2 • Nadir %3 • Destansı %4 • Efsanevi %5
@@ -7920,6 +8055,33 @@ function renderGuildWindow() {
                     ${guildSkillsHtml}
                 </div>
             </div>
+        ` : (activeGuildTab === 'apps' ? `
+            <div class="guild-members-wrap">
+                <div class="guild-table-header">
+                    <h3>📬 Lonca Üyelik Başvuruları</h3>
+                    <span style="font-size: 12px; color: #adb5bd;">Toplam ${appCount} Bekleyen Başvuru</span>
+                </div>
+                ${appCount === 0 ? `
+                    <div style="padding: 35px; text-align: center; color: #adb5bd;">
+                        <div style="font-size: 36px; margin-bottom: 8px;">📭</div>
+                        Henüz bekleyen yeni bir üyelik başvurusu bulunmuyor.
+                    </div>
+                ` : `
+                    <table class="guild-members-table">
+                        <thead>
+                            <tr>
+                                <th>Başvuran Oyuncu</th>
+                                <th>Seviye</th>
+                                <th>Başvuru Tarihi</th>
+                                <th style="text-align: right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${appRows}
+                        </tbody>
+                    </table>
+                `}
+            </div>
         ` : `
             <div class="guild-members-wrap">
                 <div class="guild-table-header">
@@ -7940,7 +8102,7 @@ function renderGuildWindow() {
                     </tbody>
                 </table>
             </div>
-        `}
+        `)}
 
         <div class="guild-footer-actions">
             <button class="primary-btn" id="guild-open-vault-btn" style="background: linear-gradient(135deg, #7209b7, #560bad); border: 1.5px solid #ffd166;">
@@ -7955,6 +8117,7 @@ function renderGuildWindow() {
     // Sekme Butonları
     const tabSkills = document.getElementById('tab-g-skills');
     const tabMembers = document.getElementById('tab-g-members');
+    const tabApps = document.getElementById('tab-g-apps');
     if (tabSkills) {
         tabSkills.onclick = () => {
             activeGuildTab = 'skills';
@@ -7966,6 +8129,58 @@ function renderGuildWindow() {
             activeGuildTab = 'members';
             renderGuildWindow();
         };
+    }
+    if (tabApps) {
+        tabApps.onclick = () => {
+            activeGuildTab = 'apps';
+            renderGuildWindow();
+        };
+    }
+
+    // Başvuru Onaylama / Reddetme Butonları (Yalnızca Lider)
+    if (activeGuildTab === 'apps' && isLeader) {
+        (activeGuild.applications || []).forEach(app => {
+            const aprBtn = document.getElementById(`btn-approve-app-${app.name}`);
+            const rejBtn = document.getElementById(`btn-reject-app-${app.name}`);
+            if (aprBtn) {
+                aprBtn.onclick = () => {
+                    activeGuild.members = activeGuild.members || [];
+                    if (!activeGuild.members.some(m => m.name.toLowerCase() === app.name.toLowerCase())) {
+                        activeGuild.members.push({
+                            name: app.name,
+                            level: app.level || 1,
+                            role: 'Üye',
+                            online: true
+                        });
+                    }
+                    activeGuild.applications = (activeGuild.applications || []).filter(a => a.name.toLowerCase() !== app.name.toLowerCase());
+                    saveGuildData();
+                    if (socket && socket.connected) {
+                        socket.emit('guild_approve_applicant', {
+                            guildName: activeGuild.name,
+                            applicantName: app.name
+                        });
+                    }
+                    showToast(`🎉 "${app.name}" loncaya kabul edildi!`, '#80ed99');
+                    addChatMessage('Lonca', `"${app.name}" loncamıza kabul edildi. Hoş geldin!`, 'system');
+                    renderGuildWindow();
+                };
+            }
+            if (rejBtn) {
+                rejBtn.onclick = () => {
+                    activeGuild.applications = (activeGuild.applications || []).filter(a => a.name.toLowerCase() !== app.name.toLowerCase());
+                    saveGuildData();
+                    if (socket && socket.connected) {
+                        socket.emit('guild_reject_applicant', {
+                            guildName: activeGuild.name,
+                            applicantName: app.name
+                        });
+                    }
+                    showToast(`❌ "${app.name}" başvurusu reddedildi.`, '#ffd166');
+                    renderGuildWindow();
+                };
+            }
+        });
     }
 
     // Yetenek Geliştirme Butonları (Yalnızca Lider)
@@ -13311,7 +13526,8 @@ function update(dt) {
                         dirY: Number((player.dirY || 0).toFixed(2)),
                         isMoving: false,
                         costume: player.equipped ? player.equipped.costume : 'costume_fisher',
-                        boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null
+                        boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null,
+                        guildName: player.guildName || ''
                     });
                 }
             }
@@ -13339,8 +13555,9 @@ function update(dt) {
                         dirX: Number((player.dirX || 1).toFixed(2)),
                         dirY: Number((player.dirY || 0).toFixed(2)),
                         isMoving: true,
-                        costume: player.equipped.costume,
-                        boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null
+                        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+                        boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null,
+                        guildName: player.guildName || ''
                     });
                 }
             }
@@ -13924,13 +14141,17 @@ function drawRemotePlayer(g, rp, x, y) {
     g.fillStyle = isGM ? '#fff3b0' : '#ffffff';
     g.fillText(nameStr, tagX + 7 + lvW + 4, tagY + tagH / 2);
 
-    // Lonca İsmi (Varsa)
-    if (rp.guildName) {
-        g.font = 'bold 10px "Segoe UI", sans-serif';
-        const gTag = `< ${rp.guildName} >`;
-        g.fillStyle = '#ffbe0b';
+    // Lonca / Klan İsmi (Karakterin Başının Üstünde Parlak Koyu Sarı)
+    if (rp.guildName && rp.guildName.trim()) {
+        const gText = `⟨ ${rp.guildName.trim()} ⟩`;
+        g.font = 'bold 10.5px "Segoe UI", sans-serif';
         g.textAlign = 'center';
-        g.fillText(gTag, x, tagY - 8);
+        g.textBaseline = 'middle';
+        g.fillStyle = '#e5a93c';
+        g.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        g.shadowBlur = 4;
+        g.fillText(gText, x, tagY - 9);
+        g.shadowBlur = 0;
     }
 
     g.restore();
@@ -14072,6 +14293,16 @@ function sendPlayerJoin() {
     console.log(`📡 [Multiplayer] player_join gönderildi: ${charName} (${cleanMap})`);
 }
 
+function syncPlayerProfileToNetwork() {
+    if (!socket || !socket.connected) return;
+    socket.emit('player_update_profile', {
+        guildName: player.guildName || '',
+        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
+        level: player.level || 1,
+        boatId: player.activeBoatId || null
+    });
+}
+
 function notifyMapChange(newMapId, targetX, targetY) {
     const cleanMap = normalizeMapId(newMapId);
     if (socket && socket.connected) {
@@ -14123,6 +14354,107 @@ function initSocketConnection() {
         socket.on('player_moved', (data) => {
             if (data && data.socketId && remotePlayers[data.socketId]) {
                 Object.assign(remotePlayers[data.socketId], data);
+            }
+        });
+
+        socket.on('player_profile_updated', (data) => {
+            if (data && data.socketId && remotePlayers[data.socketId]) {
+                if (data.guildName !== undefined) remotePlayers[data.socketId].guildName = data.guildName;
+                if (data.costume !== undefined) remotePlayers[data.socketId].costume = data.costume;
+                if (data.level !== undefined) remotePlayers[data.socketId].level = data.level;
+                if (data.boatId !== undefined) remotePlayers[data.socketId].boatId = data.boatId;
+            }
+        });
+
+        // Pazar Canlı Senkronizasyon Olayları
+        socket.on('market_sync', (listings) => {
+            if (Array.isArray(listings)) {
+                marketListings = listings.filter(l => l && (!l.id || (!l.id.startsWith('list_seed_') && l.isPlayerListing !== false)));
+                saveMarketData();
+                const modal = document.getElementById('market-modal');
+                const content = document.getElementById('market-modal-content');
+                if (modal && !modal.classList.contains('hidden') && content) {
+                    renderMarketModal(content, false);
+                }
+            }
+        });
+
+        socket.on('market_listing_added', (listing) => {
+            if (listing && listing.id) {
+                if (!marketListings.some(l => l.id === listing.id)) {
+                    marketListings.unshift(listing);
+                    saveMarketData();
+                    const modal = document.getElementById('market-modal');
+                    const content = document.getElementById('market-modal-content');
+                    if (modal && !modal.classList.contains('hidden') && content) {
+                        renderMarketModal(content, false);
+                    }
+                }
+            }
+        });
+
+        socket.on('market_listing_removed', (listingId) => {
+            marketListings = marketListings.filter(l => l.id !== listingId);
+            saveMarketData();
+            const modal = document.getElementById('market-modal');
+            const content = document.getElementById('market-modal-content');
+            if (modal && !modal.classList.contains('hidden') && content) {
+                renderMarketModal(content, false);
+            }
+        });
+
+        socket.on('market_item_sold', (data) => {
+            const it = ITEMS[data.itemId] || { name: 'Eşya' };
+            showToast(`🎉 [${it.name} x${data.count}] pazar ilanınız ${data.buyerName} tarafından satın alındı! (+${data.totalPrice} Altın)`, '#80ed99');
+            addChatMessage('Pazar', `Pazardaki [${it.name} x${data.count}] ilanınız satıldı! Hesabınıza ${data.totalPrice} Altın eklendi.`, 'system');
+            player.gold = (player.gold || 0) + Number(data.totalPrice || 0);
+            updateExpHUD();
+            saveCharacterToServer();
+        });
+
+        socket.on('market_buy_error', (data) => {
+            showToast(data.message || 'Satın alma başarısız oldu.', '#ff595e');
+        });
+
+        // Lonca Başvuru & Katılım Olayları
+        socket.on('guild_new_application', (data) => {
+            if (activeGuild && activeGuild.name === data.guildName) {
+                activeGuild.applications = data.applications || activeGuild.applications || [];
+                saveGuildData();
+                showToast(`📬 [${data.applicant.name}] loncanıza başvurdu! [G] tuşundan onaylayabilirsiniz.`, '#ffd166');
+                addChatMessage('Lonca', `[${data.applicant.name}] (Lv.${data.applicant.level}) loncanıza üyelik başvurusu yaptı! [G] tuşundan onaylayabilirsiniz.`, 'system');
+                const gModal = document.getElementById('guild-modal');
+                if (gModal && !gModal.classList.contains('hidden')) {
+                    renderGuildWindow();
+                }
+            }
+        });
+
+        socket.on('guild_application_approved', (data) => {
+            player.guildName = data.guildName;
+            activeGuild = data.guild;
+            saveGuildData();
+            syncPlayerProfileToNetwork();
+            showToast(`🎉 TEBRİKLER! [${data.guildName}] loncasına kabul edildiniz!`, '#80ed99');
+            addChatMessage('Lonca', `Tebrikler! [${data.guildName}] loncasına kabul edildin! [G] tuşuyla lonca paneline erişebilirsin.`, 'system');
+            const gModal = document.getElementById('guild-modal');
+            if (gModal && !gModal.classList.contains('hidden')) {
+                renderGuildWindow();
+            }
+        });
+
+        socket.on('guild_application_rejected', (data) => {
+            showToast(`❌ [${data.guildName}] loncasına yaptığınız başvuru reddedildi.`, '#ff595e');
+        });
+
+        socket.on('guild_data_updated', (guild) => {
+            if (activeGuild && activeGuild.name === guild.name) {
+                activeGuild = guild;
+                saveGuildData();
+                const gModal = document.getElementById('guild-modal');
+                if (gModal && !gModal.classList.contains('hidden')) {
+                    renderGuildWindow();
+                }
             }
         });
 
