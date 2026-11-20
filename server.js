@@ -391,6 +391,75 @@ const DB = {
         }
     },
 
+    async addClaimableMarketGold(charName, goldDelta) {
+        if (!charName || !goldDelta) return;
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query('SELECT user_id, data FROM characters WHERE LOWER(name) = $1 LIMIT 1', [charName.toLowerCase()]);
+            if (res.rows.length > 0) {
+                const row = res.rows[0];
+                const charData = row.data;
+                charData.claimableGold = Math.max(0, (charData.claimableGold || 0) + goldDelta);
+                await pgPool.query('UPDATE characters SET data = $1, updated_at = NOW() WHERE user_id = $2', [JSON.stringify(charData), row.user_id]);
+            }
+        } else {
+            for (const [uId, char] of Object.entries(jsonDb.characters)) {
+                if (char && char.name && char.name.toLowerCase() === charName.toLowerCase()) {
+                    char.claimableGold = Math.max(0, (char.claimableGold || 0) + goldDelta);
+                    saveJsonDb(true);
+                    break;
+                }
+            }
+        }
+    },
+
+    async claimMarketGold(charName) {
+        if (!charName) return 0;
+        let claimed = 0;
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query('SELECT user_id, data FROM characters WHERE LOWER(name) = $1 LIMIT 1', [charName.toLowerCase()]);
+            if (res.rows.length > 0) {
+                const row = res.rows[0];
+                const charData = row.data;
+                claimed = charData.claimableGold || 0;
+                charData.gold = (charData.gold || 0) + claimed;
+                charData.claimableGold = 0;
+                await pgPool.query('UPDATE characters SET data = $1, updated_at = NOW() WHERE user_id = $2', [JSON.stringify(charData), row.user_id]);
+            }
+        } else {
+            for (const [uId, char] of Object.entries(jsonDb.characters)) {
+                if (char && char.name && char.name.toLowerCase() === charName.toLowerCase()) {
+                    claimed = char.claimableGold || 0;
+                    char.gold = (char.gold || 0) + claimed;
+                    char.claimableGold = 0;
+                    saveJsonDb(true);
+                    break;
+                }
+            }
+        }
+        return claimed;
+    },
+
+    async updateCharacterGuild(charName, guildName) {
+        if (!charName) return;
+        if (dbMode === 'postgres') {
+            const res = await pgPool.query('SELECT user_id, data FROM characters WHERE LOWER(name) = $1 LIMIT 1', [charName.toLowerCase()]);
+            if (res.rows.length > 0) {
+                const row = res.rows[0];
+                const charData = row.data;
+                charData.guildName = guildName || '';
+                await pgPool.query('UPDATE characters SET data = $1, updated_at = NOW() WHERE user_id = $2', [JSON.stringify(charData), row.user_id]);
+            }
+        } else {
+            for (const [uId, char] of Object.entries(jsonDb.characters)) {
+                if (char && char.name && char.name.toLowerCase() === charName.toLowerCase()) {
+                    char.guildName = guildName || '';
+                    saveJsonDb(true);
+                    break;
+                }
+            }
+        }
+    },
+
     async getGlobalConfig() {
         if (dbMode === 'postgres') {
             const res = await pgPool.query("SELECT value FROM game_configs WHERE key = 'global_config'");
@@ -831,7 +900,18 @@ io.on('connection', (socket) => {
         // Oyuncunun loncası varsa, sunucudaki en güncel lonca verisini gönder (Destroyer & Kraken senkronizasyonu)
         if (guildName) {
             DB.getGuild(guildName).then(g => {
-                if (g) socket.emit('guild_data_updated', g);
+                if (g) {
+                    if (Array.isArray(g.members)) {
+                        const m = g.members.find(x => x && x.name && x.name.toLowerCase() === (charName || '').toLowerCase());
+                        if (m) m.online = true;
+                    }
+                    socket.emit('guild_data_updated', g);
+                    for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                        if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                            io.to(sId).emit('guild_data_updated', g);
+                        }
+                    }
+                }
             }).catch(() => {});
         }
 
@@ -920,7 +1000,7 @@ io.on('connection', (socket) => {
 
         // Satıcıya altın aktarımı ve bildirim
         if (listing.sellerName) {
-            await DB.updateCharacterGold(listing.sellerName, listing.totalPrice);
+            await DB.addClaimableMarketGold(listing.sellerName, listing.totalPrice);
             // Satıcı şu an online mı?
             const sellerSocketEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name === listing.sellerName);
             if (sellerSocketEntry) {
@@ -934,6 +1014,14 @@ io.on('connection', (socket) => {
         }
 
         socket.emit('market_buy_success', { listingId, listing });
+    });
+
+    socket.on('market_claim_gold', async (data) => {
+        const p = onlinePlayers[socket.id];
+        const name = (p && p.name) || (data && data.charName);
+        if (!name) return;
+        const claimed = await DB.claimMarketGold(name);
+        socket.emit('market_claim_gold_success', { claimed });
     });
 
     socket.on('market_cancel_listing', async (data) => {
@@ -1042,6 +1130,7 @@ io.on('connection', (socket) => {
             });
         }
         await DB.saveGuild(guildName, guild);
+        await DB.updateCharacterGuild(applicantName, guildName);
 
         // Lidere güncel lonca verisini gönder
         socket.emit('guild_data_updated', guild);
@@ -1089,13 +1178,67 @@ io.on('connection', (socket) => {
         const guild = await DB.getGuild(guildName);
         if (guild && guild.members) {
             guild.members = guild.members.filter(m => m.name.toLowerCase() !== nameToLeave.toLowerCase());
+            if (guild.applications) {
+                guild.applications = guild.applications.filter(a => a.name.toLowerCase() !== nameToLeave.toLowerCase());
+            }
             await DB.saveGuild(guildName, guild);
         }
+
+        await DB.updateCharacterGuild(nameToLeave, '');
 
         if (p) {
             p.guildName = '';
             socket.to(`map_${p.mapId}`).emit('player_profile_updated', {
                 socketId: socket.id,
+                guildName: ''
+            });
+            socket.emit('guild_left_success');
+        }
+
+        if (guild) {
+            for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                    io.to(sId).emit('guild_data_updated', guild);
+                }
+            }
+        }
+    });
+
+    socket.on('guild_kick_member', async (data) => {
+        const { guildName, memberName } = data || {};
+        if (!guildName || !memberName) return;
+
+        const guild = await DB.getGuild(guildName);
+        if (!guild) return;
+
+        const p = onlinePlayers[socket.id];
+        if (!p || (guild.leader && guild.leader.toLowerCase() !== p.name.toLowerCase())) {
+            socket.emit('guild_action_error', { message: 'Sadece lonca lideri üye çıkarabilir!' });
+            return;
+        }
+
+        guild.members = (guild.members || []).filter(m => m.name.toLowerCase() !== memberName.toLowerCase());
+        if (guild.applications) {
+            guild.applications = guild.applications.filter(a => a.name.toLowerCase() !== memberName.toLowerCase());
+        }
+        await DB.saveGuild(guildName, guild);
+        await DB.updateCharacterGuild(memberName, '');
+
+        // Kalan lonca üyelerine güncelleme gönder
+        for (const [sId, pl] of Object.entries(onlinePlayers)) {
+            if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                io.to(sId).emit('guild_data_updated', guild);
+            }
+        }
+
+        // Atılan üye online ise ona bildir ve loncadan çıkar
+        const kickedEntry = Object.entries(onlinePlayers).find(([sId, pl]) => pl.name.toLowerCase() === memberName.toLowerCase());
+        if (kickedEntry) {
+            const kickedSocketId = kickedEntry[0];
+            onlinePlayers[kickedSocketId].guildName = '';
+            io.to(kickedSocketId).emit('guild_kicked', { guildName });
+            socket.to(`map_${onlinePlayers[kickedSocketId].mapId}`).emit('player_profile_updated', {
+                socketId: kickedSocketId,
                 guildName: ''
             });
         }
@@ -1237,6 +1380,19 @@ io.on('connection', (socket) => {
         const p = onlinePlayers[socket.id];
         if (p) {
             socket.to(`map_${p.mapId}`).emit('player_left', socket.id);
+            if (p.guildName) {
+                DB.getGuild(p.guildName).then(g => {
+                    if (g && Array.isArray(g.members)) {
+                        const m = g.members.find(x => x && x.name && x.name.toLowerCase() === (p.name || '').toLowerCase());
+                        if (m) m.online = false;
+                        for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                            if (sId !== socket.id && pl.guildName && pl.guildName.toLowerCase() === p.guildName.toLowerCase()) {
+                                io.to(sId).emit('guild_data_updated', g);
+                            }
+                        }
+                    }
+                }).catch(() => {});
+            }
             delete onlinePlayers[socket.id];
             io.emit('online_count', Object.keys(onlinePlayers).length);
         }
