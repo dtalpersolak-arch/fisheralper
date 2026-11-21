@@ -1936,11 +1936,15 @@ renderBuffBar();
 
 function showToast(msg, borderColor = '#d4a373') {
     const container = document.getElementById('toast-container');
+    if (!container) return;
     const el = document.createElement('div');
     el.className = 'toast';
     el.style.borderColor = borderColor;
     el.textContent = msg;
     container.appendChild(el);
+    while (container.children.length > 6) {
+        container.removeChild(container.firstChild);
+    }
     setTimeout(() => {
         el.style.opacity = '0';
         el.style.transition = 'opacity 0.3s';
@@ -7055,6 +7059,24 @@ if (player.guildName && (!activeGuild || !activeGuild.name)) {
 
 function sanitizeActiveGuild(guild) {
     if (!guild || typeof guild !== 'object') return guild;
+    if (typeof guild.level !== 'number') guild.level = 1;
+    if (typeof guild.exp !== 'number') guild.exp = 0;
+    if (!guild.skills || typeof guild.skills !== 'object') {
+        guild.skills = {
+            guild_blessing: 0,
+            guild_alchemist: 0,
+            guild_veteran: 0,
+            guild_gambler: 0,
+            guild_carpenter: 0
+        };
+    }
+    if (typeof guild.skillPoints !== 'number') {
+        const spent = Object.values(guild.skills).reduce((a, b) => a + (Number(b) || 0), 0);
+        guild.skillPoints = Math.max(0, (guild.level || 1) - spent);
+    }
+    if (!guild.vault || !Array.isArray(guild.vault) || guild.vault.length !== 2) {
+        guild.vault = [new Array(24).fill(null), new Array(24).fill(null)];
+    }
     if (guild.leader) {
         const cleanMembers = [];
         const seen = new Set();
@@ -7099,13 +7121,106 @@ function sanitizeActiveGuild(guild) {
     return guild;
 }
 
-function saveGuildData() {
+function mergeGuildData(serverGuild, localGuild) {
+    if (!serverGuild) return localGuild;
+    if (!localGuild) return serverGuild;
+    if (serverGuild.name && localGuild.name && serverGuild.name.toLowerCase() !== localGuild.name.toLowerCase()) {
+        return serverGuild;
+    }
+
+    const merged = { ...serverGuild };
+
+    const serverLevel = Number(serverGuild.level) || 1;
+    const localLevel = Number(localGuild.level) || 1;
+
+    const serverSpent = Object.values(serverGuild.skills || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+    const localSpent = Object.values(localGuild.skills || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+    const serverTotalPoints = (Number(serverGuild.skillPoints) || 0) + serverSpent;
+    const localTotalPoints = (Number(localGuild.skillPoints) || 0) + localSpent;
+
+    let needsSyncToServer = false;
+
+    // Eğer yerel (client) veride seviye veya harcanan/mevcut puanlar sunucudan daha ilerideyse
+    // (örneğin sunucuya aktarılmadan önceki oturumdan kalan kazanımlar):
+    if (localLevel > serverLevel) {
+        merged.level = localLevel;
+        merged.exp = Number(localGuild.exp) || 0;
+        needsSyncToServer = true;
+    } else if (localLevel === serverLevel && (Number(localGuild.exp) || 0) > (Number(serverGuild.exp) || 0)) {
+        merged.exp = Number(localGuild.exp);
+        needsSyncToServer = true;
+    }
+
+    if (localTotalPoints > serverTotalPoints) {
+        merged.skillPoints = Math.max(Number(serverGuild.skillPoints) || 0, Number(localGuild.skillPoints) || 0);
+        merged.skills = { ...(serverGuild.skills || {}) };
+        for (const [sk, lv] of Object.entries(localGuild.skills || {})) {
+            merged.skills[sk] = Math.max(Number(merged.skills[sk]) || 0, Number(lv) || 0);
+        }
+        needsSyncToServer = true;
+    }
+
+    // Kasa kontrolü: sunucu kasası tamamen boş ama yerel kasada eşya varsa yerel kasayı koru
+    if (Array.isArray(localGuild.vault)) {
+        const localHasItems = localGuild.vault.some(p => Array.isArray(p) && p.some(s => s !== null));
+        const serverHasItems = Array.isArray(serverGuild.vault) && serverGuild.vault.some(p => Array.isArray(p) && p.some(s => s !== null));
+        if (localHasItems && !serverHasItems) {
+            merged.vault = localGuild.vault;
+            needsSyncToServer = true;
+        }
+    }
+
+    if (needsSyncToServer) {
+        setTimeout(() => syncGuildToServer(merged), 250);
+    }
+
+    return merged;
+}
+
+let syncGuildDebounce = null;
+
+function syncGuildToServer(guildToSync = null) {
+    const target = guildToSync || activeGuild;
+    if (!target || !target.name) return;
+
+    if (socket && socket.connected) {
+        socket.emit('guild_update_data', {
+            guildName: target.name,
+            level: Number(target.level) || 1,
+            exp: Number(target.exp) || 0,
+            skillPoints: Number(target.skillPoints) || 0,
+            skills: target.skills || {},
+            vault: target.vault || null
+        });
+    }
+
+    if (serverOnline && authToken) {
+        fetch(getServerApiUrl('/api/guild/save'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ guildData: target })
+        }).catch(() => {});
+    }
+}
+
+function saveGuildData(syncToServer = true) {
     try {
         if (activeGuild) {
             sanitizeActiveGuild(activeGuild);
             localStorage.setItem('mmo_guild_data', JSON.stringify(activeGuild));
             localStorage.setItem('mmo_player_guild', activeGuild.name);
             player.guildName = activeGuild.name;
+
+            if (syncToServer) {
+                if (syncGuildDebounce) clearTimeout(syncGuildDebounce);
+                syncGuildDebounce = setTimeout(() => {
+                    syncGuildToServer();
+                    syncGuildDebounce = null;
+                }, 150);
+            }
         } else {
             localStorage.removeItem('mmo_guild_data');
             localStorage.removeItem('mmo_player_guild');
@@ -14182,13 +14297,130 @@ function gCircle(g, x, y, r, color) {
     g.fill();
 }
 
+// ============================================================================
+// KESİNTİSİZ OYUN DÖNGÜSÜ & ARKA PLAN (BACKGROUND / MINIMIZE) ÇALIŞMA SİSTEMİ
+// Oyunu alta aldığınızda veya başka sekmeye geçtiğinizde tarayıcının rAF'ı
+// durdurmasını engeller; Web Worker ve interval ile oyun simülasyonunu kesintisiz sürdürür.
+// ============================================================================
 let lastTime = performance.now();
+let rafId = null;
+let bgWorker = null;
+let bgFallbackInterval = null;
+
+function stepGameSimulation(elapsedSeconds) {
+    if (!isGameReady) return;
+    // Aşırı gecikmeleri (bilgisayar uyku modu vb.) sınırla: en fazla 2 saniye
+    let remaining = Math.min(Math.max(0, elapsedSeconds), 2.0);
+    const fixedStep = 0.05; // 50ms kararlı adımlar
+    while (remaining > 0) {
+        const dt = Math.min(remaining, fixedStep);
+        update(dt);
+        remaining -= dt;
+    }
+}
+
 function gameLoop(now) {
-    const dt = Math.min(0.1, (now - lastTime) / 1000);
+    rafId = null;
+    
+    // Sekme görünür olduğunda standart pürüzsüz 60+ FPS döngü
+    if (!document.hidden) {
+        const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1000));
+        lastTime = now;
+        update(dt);
+        render();
+        rafId = requestAnimationFrame(gameLoop);
+    }
+}
+
+function startMainLoop() {
+    if (rafId === null && !document.hidden) {
+        lastTime = performance.now();
+        rafId = requestAnimationFrame(gameLoop);
+    }
+}
+
+function onBackgroundTick() {
+    if (!isGameReady) return;
+    const now = performance.now();
+    const timeSinceLast = (now - lastTime) / 1000;
+    
+    // Eğer sekme açık ve rAF normal çalışıyorsa (timeSinceLast çok küçükse) müdahale etme
+    if (!document.hidden && timeSinceLast < 0.08) {
+        return;
+    }
+    
+    // Çok sık (10ms'den daha kısa aralıkla) çağrılmaları yoksay
+    if (timeSinceLast < 0.01) {
+        return;
+    }
+    
+    // Sekme arka plandayken veya rAF kesildiğinde oyun mantığını (update) canlı tut:
     lastTime = now;
-    update(dt);
-    render();
-    requestAnimationFrame(gameLoop);
+    stepGameSimulation(timeSinceLast);
+}
+
+function initBackgroundRunner() {
+    // 1. Web Worker (Arka planda tarayıcı tarafından asla kısıtlanmaz veya dondurulmaz)
+    try {
+        const workerScript = `
+            let timer = null;
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    if (!timer) {
+                        timer = setInterval(function() {
+                            self.postMessage('tick');
+                        }, 25);
+                    }
+                } else if (e.data === 'stop') {
+                    if (timer) {
+                        clearInterval(timer);
+                        timer = null;
+                    }
+                }
+            };
+        `;
+        const blob = new Blob([workerScript], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(blob);
+        bgWorker = new Worker(workerUrl);
+        bgWorker.onmessage = function(e) {
+            if (e.data === 'tick') {
+                onBackgroundTick();
+            }
+        };
+        bgWorker.postMessage('start');
+    } catch (e) {
+        console.warn('[MMO] Arka plan Web Worker başlatılamadı, fallback zamanlayıcı kullanılacak:', e);
+    }
+
+    // 2. Yedek Interval (Worker kısıtlıysa veya yerel dosya sistemindeyse devreye girer)
+    if (!bgFallbackInterval) {
+        bgFallbackInterval = setInterval(() => {
+            onBackgroundTick();
+        }, 40);
+    }
+
+    // 3. Sekme Görünürlük & Odaklanma Olayları
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            lastTime = performance.now();
+            try { render(); } catch (_) {}
+            startMainLoop();
+        } else {
+            lastTime = performance.now();
+        }
+    });
+
+    window.addEventListener('focus', () => {
+        if (!document.hidden) {
+            lastTime = performance.now();
+            try { render(); } catch (_) {}
+            startMainLoop();
+        }
+    });
+
+    window.addEventListener('blur', () => {
+        lastTime = performance.now();
+    });
 }
 
 const closeGuildBtn = document.getElementById('close-guild-btn');
@@ -14501,6 +14733,9 @@ async function saveCharacterToServer() {
             },
             body: JSON.stringify({ characterData: payload })
         });
+        if (activeGuild && activeGuild.name && typeof syncGuildToServer === 'function') {
+            syncGuildToServer();
+        }
     } catch (e) {
         console.warn('Buluta kaydetme hatası:', e);
     }
@@ -14708,8 +14943,8 @@ function initSocketConnection() {
             if (!guild) return;
             const currentName = (activeGuild && activeGuild.name) || player.guildName || '';
             if (currentName && guild.name && currentName.toLowerCase() === guild.name.toLowerCase()) {
-                activeGuild = guild;
-                saveGuildData();
+                activeGuild = mergeGuildData(guild, activeGuild);
+                saveGuildData(false);
                 const gModal = document.getElementById('guild-modal');
                 if (gModal && !gModal.classList.contains('hidden')) {
                     renderGuildWindow();
@@ -15328,4 +15563,5 @@ initCharacterCreationModal();
 sanitizeVaultAndInventoryCostumes();
 initAuthGatewaySystem();
 isGameReady = true;
-requestAnimationFrame(gameLoop);
+initBackgroundRunner();
+startMainLoop();

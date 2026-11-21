@@ -167,6 +167,24 @@ async function initDatabase() {
 
 function sanitizeGuildData(guild) {
     if (!guild || typeof guild !== 'object') return guild;
+    if (typeof guild.level !== 'number') guild.level = 1;
+    if (typeof guild.exp !== 'number') guild.exp = 0;
+    if (!guild.skills || typeof guild.skills !== 'object') {
+        guild.skills = {
+            guild_blessing: 0,
+            guild_alchemist: 0,
+            guild_veteran: 0,
+            guild_gambler: 0,
+            guild_carpenter: 0
+        };
+    }
+    if (typeof guild.skillPoints !== 'number') {
+        const spent = Object.values(guild.skills).reduce((a, b) => a + (Number(b) || 0), 0);
+        guild.skillPoints = Math.max(0, (guild.level || 1) - spent);
+    }
+    if (!guild.vault || !Array.isArray(guild.vault) || guild.vault.length !== 2) {
+        guild.vault = [new Array(24).fill(null), new Array(24).fill(null)];
+    }
     if (guild.leader) {
         const cleanMembers = [];
         const seen = new Set();
@@ -841,6 +859,58 @@ app.get('/api/guilds', async (req, res) => {
     }
 });
 
+// 7.1. LONCA İLERLEMESİNİ (LEVEL, EXP, SKILL, VAULT) BULUTA KAYDET
+app.post('/api/guild/save', authMiddleware, async (req, res) => {
+    try {
+        const { guildData } = req.body || {};
+        if (!guildData || !guildData.name) {
+            return res.status(400).json({ success: false, message: 'Geçersiz lonca verisi.' });
+        }
+        const guild = await DB.getGuild(guildData.name);
+        if (!guild) {
+            return res.status(404).json({ success: false, message: 'Lonca bulunamadı.' });
+        }
+
+        let changed = false;
+        if (typeof guildData.level === 'number' && guildData.level >= 1 && guildData.level <= 10) {
+            guild.level = Math.max(guild.level || 1, guildData.level);
+            changed = true;
+        }
+        if (typeof guildData.exp === 'number') {
+            guild.exp = Math.max(0, Math.min(100, guildData.exp));
+            changed = true;
+        }
+        if (typeof guildData.skillPoints === 'number') {
+            guild.skillPoints = Math.max(0, guildData.skillPoints);
+            changed = true;
+        }
+        if (guildData.skills && typeof guildData.skills === 'object') {
+            guild.skills = guild.skills || {};
+            for (const [skId, skLv] of Object.entries(guildData.skills)) {
+                guild.skills[skId] = Math.max(0, Math.min(5, Number(skLv) || 0));
+            }
+            changed = true;
+        }
+        if (Array.isArray(guildData.vault) && guildData.vault.length === 2) {
+            guild.vault = guildData.vault;
+            changed = true;
+        }
+
+        if (changed) {
+            await DB.saveGuild(guildData.name, guild);
+            for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                if (pl.guildName && pl.guildName.toLowerCase() === guildData.name.toLowerCase()) {
+                    io.to(sId).emit('guild_data_updated', guild);
+                }
+            }
+        }
+        return res.json({ success: true, message: 'Lonca verisi başarıyla kaydedildi.' });
+    } catch (err) {
+        console.error('Lonca kaydetme hatası:', err);
+        return res.status(500).json({ success: false, message: 'Lonca kaydedilemedi.' });
+    }
+});
+
 // 8. OYUN GLOBAL AYARLARI (GM Ayarları Senkronizasyonu)
 app.get('/api/config', async (req, res) => {
     try {
@@ -1328,6 +1398,54 @@ io.on('connection', (socket) => {
             if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
                 io.to(sId).emit('guild_kraken_raid_ended', { guildName });
                 if (guild) io.to(sId).emit('guild_data_updated', guild);
+            }
+        }
+    });
+
+    socket.on('guild_update_data', async (data) => {
+        const { guildName, level, exp, skillPoints, skills, vault } = data || {};
+        if (!guildName) return;
+
+        const p = onlinePlayers[socket.id];
+        // Sadece loncanın bir üyesi lonca verilerini güncelleyebilir
+        if (!p || !p.guildName || p.guildName.toLowerCase() !== guildName.toLowerCase()) {
+            return;
+        }
+
+        const guild = await DB.getGuild(guildName);
+        if (!guild) return;
+
+        let changed = false;
+        if (typeof level === 'number' && level >= 1 && level <= 10) {
+            guild.level = Math.max(guild.level || 1, level);
+            changed = true;
+        }
+        if (typeof exp === 'number') {
+            guild.exp = Math.max(0, Math.min(100, exp));
+            changed = true;
+        }
+        if (typeof skillPoints === 'number') {
+            guild.skillPoints = Math.max(0, skillPoints);
+            changed = true;
+        }
+        if (skills && typeof skills === 'object') {
+            guild.skills = guild.skills || {};
+            for (const [skId, skLv] of Object.entries(skills)) {
+                guild.skills[skId] = Math.max(0, Math.min(5, Number(skLv) || 0));
+            }
+            changed = true;
+        }
+        if (Array.isArray(vault) && vault.length === 2) {
+            guild.vault = vault;
+            changed = true;
+        }
+
+        if (changed) {
+            await DB.saveGuild(guildName, guild);
+            for (const [sId, pl] of Object.entries(onlinePlayers)) {
+                if (pl.guildName && pl.guildName.toLowerCase() === guildName.toLowerCase()) {
+                    io.to(sId).emit('guild_data_updated', guild);
+                }
             }
         }
     });
