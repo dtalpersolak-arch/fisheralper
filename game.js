@@ -1773,6 +1773,38 @@ function getEquippedCostumeItem() {
     return player.equipped.costume ? ITEMS[player.equipped.costume] : null;
 }
 
+function isItemEntryEquipped(entry) {
+    if (!entry || !entry.id || !player.equipped) return false;
+    const item = ITEMS[entry.id];
+    if (!item) return false;
+
+    if (item.type === 'rod') {
+        if (!player.equipped.rod) return false;
+        if (entry.uid && player.equipped.rodUid) {
+            return player.equipped.rodUid === entry.uid;
+        }
+        const eqEntry = getEquippedRodEntry();
+        if (eqEntry) return eqEntry === entry || (Boolean(entry.uid) && eqEntry.uid === entry.uid);
+        return player.equipped.rod === entry.id;
+    }
+
+    if (item.type === 'costume') {
+        if (!player.equipped.costume) return false;
+        if (entry.uid && player.equipped.costumeUid) {
+            return player.equipped.costumeUid === entry.uid;
+        }
+        const eqEntry = getEquippedCostumeEntry();
+        if (eqEntry) return eqEntry === entry || (Boolean(entry.uid) && eqEntry.uid === entry.uid);
+        return player.equipped.costume === entry.id;
+    }
+
+    if (item.type === 'bait') {
+        return Boolean(player.equipped.bait === entry.id);
+    }
+
+    return false;
+}
+
 function getEntryEnchants(entry) {
     if (!entry) return { count: 0, luck: 0, speed: 0, control: 0 };
     if (entry.enchants) return entry.enchants;
@@ -3734,8 +3766,8 @@ function handleInventoryItemClick(invEntry) {
     if (!item) return;
 
     if (item.type === 'rod') {
-        const isSameEquipped = (invEntry.uid && player.equipped.rodUid === invEntry.uid) ||
-                               (!invEntry.uid && player.equipped.rod === item.id);
+        if (!invEntry.uid) invEntry.uid = generateItemUid();
+        const isSameEquipped = isItemEntryEquipped(invEntry);
         if (isSameEquipped) {
             player.equipped.rod = null;
             player.equipped.rodUid = null;
@@ -3744,7 +3776,7 @@ function handleInventoryItemClick(invEntry) {
             showToast(`${item.name} çıkarıldı.`);
         } else {
             player.equipped.rod = item.id;
-            player.equipped.rodUid = invEntry.uid || null;
+            player.equipped.rodUid = invEntry.uid;
             const e = getEntryEnchants(invEntry);
             const plusStr = e.count > 0 ? ` (+${e.count})` : '';
             showToast(`${item.name}${plusStr} kuşandı!`, '#52b788');
@@ -3753,14 +3785,13 @@ function handleInventoryItemClick(invEntry) {
         renderInventoryUI();
         renderBuffBar();
     } else if (item.type === 'costume') {
-        const isSameEquipped = (invEntry.uid && player.equipped.costumeUid === invEntry.uid) ||
-                               (!invEntry.uid && player.equipped.costume === item.id);
+        if (!invEntry.uid) invEntry.uid = generateItemUid();
+        const isSameEquipped = isItemEntryEquipped(invEntry);
         if (isSameEquipped) {
             player.equipped.costume = null;
             player.equipped.costumeUid = null;
             showToast(`${item.name} çıkarıldı.`);
         } else {
-            if (!invEntry.uid) invEntry.uid = generateItemUid();
             player.equipped.costume = item.id;
             player.equipped.costumeUid = invEntry.uid;
             const e = getEntryEnchants(invEntry);
@@ -3988,15 +4019,12 @@ function renderInventoryUI() {
                 slotDiv.appendChild(countSpan);
             }
 
-            const isEquipped =
-                (item.type === 'rod' && ((invEntry.uid && player.equipped.rodUid === invEntry.uid) || (!invEntry.uid && player.equipped.rod === item.id))) ||
-                (item.type === 'costume' && ((invEntry.uid && player.equipped.costumeUid === invEntry.uid) || (!invEntry.uid && player.equipped.costume === item.id))) ||
-                (item.type === 'bait' && player.equipped.bait === item.id);
-
+            const isEquipped = isItemEntryEquipped(invEntry);
             if (isEquipped) {
+                slotDiv.classList.add('is-equipped');
                 const badge = document.createElement('span');
                 badge.className = 'equipped-badge';
-                badge.textContent = 'E';
+                badge.textContent = '✓ KUŞANILDI';
                 slotDiv.appendChild(badge);
             }
 
@@ -4034,6 +4062,7 @@ function renderInventoryUI() {
                 let plusTitle = e && e.count > 0 ? `${item.name} (+${e.count})` : item.name;
                 if (item.isRoyal) plusTitle = `👑 ${plusTitle} [KRALİYET]`;
                 else if (item.isSOS) plusTitle = `🌟 ${plusTitle} [SEAL OF STAR]`;
+                if (isEquipped) plusTitle = `[KUŞANILDI] ${plusTitle}`;
                 document.getElementById('tt-title').textContent = plusTitle;
                 document.getElementById('tt-type').textContent = item.typeName;
                 document.getElementById('tt-desc').textContent = item.desc;
@@ -4678,6 +4707,15 @@ function renderMarketSellTab(tabContainer, mainContainer) {
                 slotDiv.appendChild(countBadge);
             }
 
+            const isEquipped = isItemEntryEquipped(entry);
+            if (isEquipped) {
+                slotDiv.classList.add('is-equipped');
+                const badge = document.createElement('span');
+                badge.className = 'equipped-badge';
+                badge.textContent = '✓ KUŞANILDI';
+                slotDiv.appendChild(badge);
+            }
+
             if (it.type === 'rod' || it.type === 'costume') {
                 const e = getEntryEnchants(entry);
                 if (e && e.count > 0) {
@@ -5125,6 +5163,14 @@ function renderStorageModal(container) {
                 c.className = 'item-count';
                 c.textContent = `x${entry.count}`;
                 slotDiv.appendChild(c);
+            }
+            const isEquipped = isItemEntryEquipped(entry);
+            if (isEquipped) {
+                slotDiv.classList.add('is-equipped');
+                const badge = document.createElement('span');
+                badge.className = 'equipped-badge';
+                badge.textContent = '✓ KUŞANILDI';
+                slotDiv.appendChild(badge);
             }
             if (item.type === 'rod' || item.type === 'costume') {
                 const e = getEntryEnchants(entry);
@@ -6050,12 +6096,12 @@ function renderAnvilModal(container) {
                 slotDiv.appendChild(c);
             }
 
-            const isEquipped = (item.type === 'rod' && ((entry.uid && player.equipped.rodUid === entry.uid) || (!entry.uid && player.equipped.rod === item.id))) ||
-                               (item.type === 'costume' && ((entry.uid && player.equipped.costumeUid === entry.uid) || (!entry.uid && player.equipped.costume === item.id)));
+            const isEquipped = isItemEntryEquipped(entry);
             if (isEquipped) {
+                slotDiv.classList.add('is-equipped');
                 const badge = document.createElement('span');
                 badge.className = 'equipped-badge';
-                badge.textContent = 'E';
+                badge.textContent = '✓ KUŞANILDI';
                 slotDiv.appendChild(badge);
             }
 
@@ -8056,6 +8102,14 @@ function renderGuildStorageModal(container) {
                 c.className = 'item-count';
                 c.textContent = `x${entry.count}`;
                 slotDiv.appendChild(c);
+            }
+            const isEquipped = isItemEntryEquipped(entry);
+            if (isEquipped) {
+                slotDiv.classList.add('is-equipped');
+                const badge = document.createElement('span');
+                badge.className = 'equipped-badge';
+                badge.textContent = '✓ KUŞANILDI';
+                slotDiv.appendChild(badge);
             }
             if (item.type === 'rod' || item.type === 'costume') {
                 const e = getEntryEnchants(entry);
@@ -14834,6 +14888,24 @@ function applyLoadedCharacter(c) {
         if (c.activeBoatId) player.activeBoatId = c.activeBoatId;
         if (c.rodEnchants) Object.assign(player.rodEnchants, c.rodEnchants);
         if (c.costumeEnchants) Object.assign(player.costumeEnchants, c.costumeEnchants);
+
+        // Kuşanılan eşyaların envanter UID senkronizasyonunu doğrula ve onar
+        if (player.equipped && Array.isArray(player.inventory)) {
+            if (player.equipped.rod && !player.inventory.some(i => i.uid && i.uid === player.equipped.rodUid)) {
+                const rodEntry = player.inventory.find(i => i.id === player.equipped.rod);
+                if (rodEntry) {
+                    if (!rodEntry.uid) rodEntry.uid = generateItemUid();
+                    player.equipped.rodUid = rodEntry.uid;
+                }
+            }
+            if (player.equipped.costume && !player.inventory.some(i => i.uid && i.uid === player.equipped.costumeUid)) {
+                const costumeEntry = player.inventory.find(i => i.id === player.equipped.costume);
+                if (costumeEntry) {
+                    if (!costumeEntry.uid) costumeEntry.uid = generateItemUid();
+                    player.equipped.costumeUid = costumeEntry.uid;
+                }
+            }
+        }
         player.claimableGold = Number(c.claimableGold || 0);
         if (c.guildName) {
             player.guildName = c.guildName;

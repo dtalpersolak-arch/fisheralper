@@ -787,14 +787,33 @@ body, html {
 
 .equipped-badge {
     position: absolute;
-    top: 3px;
-    left: 3px;
-    background: #2b9348;
-    color: #fff;
-    font-size: 9px;
+    bottom: 2px;
+    left: 2px;
+    background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    color: #ffffff;
+    font-size: 7.5px;
+    font-weight: 900;
     padding: 1px 4px;
-    border-radius: 4px;
-    font-weight: 800;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), 0 0 6px rgba(16, 185, 129, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    white-space: nowrap;
+    z-index: 6;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    line-height: 1.2;
+}
+
+.item-slot.is-equipped {
+    border-color: #10b981 !important;
+    background: linear-gradient(145deg, rgba(16, 185, 129, 0.16) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.55), inset 0 0 8px rgba(16, 185, 129, 0.3) !important;
+}
+
+.item-slot.is-equipped.plus7-slot {
+    border-color: #ff5400 !important;
+    box-shadow: 0 0 14px rgba(255, 84, 0, 0.85), inset 0 0 10px rgba(16, 185, 129, 0.35) !important;
 }
 
 .enchant-badge {
