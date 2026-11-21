@@ -987,6 +987,12 @@ io.on('connection', (socket) => {
             isMoving: false,
             mapId: safeMap,
             costume: costume || 'costume_fisher',
+            costumePlus: Number(data.costumePlus) || 0,
+            isSOSCostume: Boolean(data.isSOSCostume),
+            isRoyalCostume: Boolean(data.isRoyalCostume),
+            rod: data.rod || null,
+            rodPlus: Number(data.rodPlus) || 0,
+            isSOSRod: Boolean(data.isSOSRod),
             boatId: boatId || null,
             guildName: guildName || '',
             isFishing: false
@@ -1028,7 +1034,7 @@ io.on('connection', (socket) => {
         }).catch(() => {});
     });
 
-    // 2. Oyuncu Hareketi (Anlık Pozisyon & Yön Güncellemesi)
+    // 2. Oyuncu Hareketi (Anlık Pozisyon, Yön, Kostüm & Silah Senkronizasyonu)
     socket.on('player_move', (data) => {
         const p = onlinePlayers[socket.id];
         if (!p) return;
@@ -1038,7 +1044,13 @@ io.on('connection', (socket) => {
         p.dirX = Number(data.dirX || 1);
         p.dirY = Number(data.dirY || 0);
         p.isMoving = Boolean(data.isMoving);
-        if (data.costume) p.costume = data.costume;
+        if (data.costume !== undefined) p.costume = data.costume;
+        if (data.costumePlus !== undefined) p.costumePlus = Number(data.costumePlus) || 0;
+        if (data.isSOSCostume !== undefined) p.isSOSCostume = Boolean(data.isSOSCostume);
+        if (data.isRoyalCostume !== undefined) p.isRoyalCostume = Boolean(data.isRoyalCostume);
+        if (data.rod !== undefined) p.rod = data.rod;
+        if (data.rodPlus !== undefined) p.rodPlus = Number(data.rodPlus) || 0;
+        if (data.isSOSRod !== undefined) p.isSOSRod = Boolean(data.isSOSRod);
         if (data.boatId !== undefined) p.boatId = data.boatId;
         if (data.guildName !== undefined) p.guildName = data.guildName;
 
@@ -1050,17 +1062,29 @@ io.on('connection', (socket) => {
             dirY: p.dirY,
             isMoving: p.isMoving,
             costume: p.costume,
+            costumePlus: p.costumePlus,
+            isSOSCostume: p.isSOSCostume,
+            isRoyalCostume: p.isRoyalCostume,
+            rod: p.rod,
+            rodPlus: p.rodPlus,
+            isSOSRod: p.isSOSRod,
             boatId: p.boatId,
             guildName: p.guildName
         });
     });
 
-    // 2.1 Oyuncu Profil Güncellemesi (Lonca, Kostüm, Seviye)
+    // 2.1 Oyuncu Profil Güncellemesi (Lonca, Kostüm, Silah, Efektler, Seviye)
     socket.on('player_update_profile', (data) => {
         const p = onlinePlayers[socket.id];
         if (!p) return;
         if (data.guildName !== undefined) p.guildName = data.guildName;
         if (data.costume !== undefined) p.costume = data.costume;
+        if (data.costumePlus !== undefined) p.costumePlus = Number(data.costumePlus) || 0;
+        if (data.isSOSCostume !== undefined) p.isSOSCostume = Boolean(data.isSOSCostume);
+        if (data.isRoyalCostume !== undefined) p.isRoyalCostume = Boolean(data.isRoyalCostume);
+        if (data.rod !== undefined) p.rod = data.rod;
+        if (data.rodPlus !== undefined) p.rodPlus = Number(data.rodPlus) || 0;
+        if (data.isSOSRod !== undefined) p.isSOSRod = Boolean(data.isSOSRod);
         if (data.level !== undefined) p.level = data.level;
         if (data.boatId !== undefined) p.boatId = data.boatId;
 
@@ -1068,6 +1092,12 @@ io.on('connection', (socket) => {
             socketId: socket.id,
             guildName: p.guildName,
             costume: p.costume,
+            costumePlus: p.costumePlus,
+            isSOSCostume: p.isSOSCostume,
+            isRoyalCostume: p.isRoyalCostume,
+            rod: p.rod,
+            rodPlus: p.rodPlus,
+            isSOSRod: p.isSOSRod,
             level: p.level,
             boatId: p.boatId
         });

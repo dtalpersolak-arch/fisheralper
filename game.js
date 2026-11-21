@@ -815,9 +815,9 @@ const RARITY = {
     }
 };
 
-// Efsun Basma Başarı İhtimalleri ve Oyun Kuralları (Kontrol Panelinden Düzenlenebilir)
-let ENCHANT_SUCCESS_RATES = [100, 40, 20, 10, 5];
-let MAX_ENCHANT_COUNT = 5;
+// Efsun Basma Başarı İhtimalleri ve Oyun Kuralları (+7 Sınırı, +3 Güvenli Bölge)
+let ENCHANT_SUCCESS_RATES = [100, 60, 40, 20, 10, 5, 2];
+let MAX_ENCHANT_COUNT = 7;
 const MAX_PLAYER_LEVEL = 20;
 
 const GAME_RULES = {
@@ -1786,6 +1786,44 @@ function getEntryEnchants(entry) {
         return entry.enchants;
     }
     return player.rodEnchants[entry.id] || { count: 0, luck: 0, speed: 0, control: 0 };
+}
+
+function getEquippedRodPlus() {
+    const entry = getEquippedRodEntry();
+    if (entry && entry.enchants && typeof entry.enchants.count === 'number') {
+        return entry.enchants.count;
+    }
+    if (player.equipped && player.equipped.rod && player.rodEnchants && player.rodEnchants[player.equipped.rod]) {
+        return player.rodEnchants[player.equipped.rod].count || 0;
+    }
+    return 0;
+}
+
+function getEquippedCostumePlus() {
+    const entry = getEquippedCostumeEntry();
+    if (entry && entry.enchants && typeof entry.enchants.count === 'number') {
+        return entry.enchants.count;
+    }
+    if (player.equipped && player.equipped.costume && player.costumeEnchants && player.costumeEnchants[player.equipped.costume]) {
+        return player.costumeEnchants[player.equipped.costume].count || 0;
+    }
+    return 0;
+}
+
+function getPlayerEquipmentSyncPayload() {
+    const rodId = player.equipped ? player.equipped.rod : null;
+    const costumeId = player.equipped ? player.equipped.costume : 'costume_fisher';
+    const rodItem = rodId ? ITEMS[rodId] : null;
+    const costumeItem = costumeId ? ITEMS[costumeId] : null;
+    return {
+        costume: costumeId || 'costume_fisher',
+        costumePlus: getEquippedCostumePlus(),
+        isSOSCostume: Boolean(costumeItem && (costumeItem.isSOS || costumeItem.isRoyal)),
+        isRoyalCostume: Boolean(costumeItem && (costumeItem.id === 'costume_royal_guard' || costumeItem.isRoyal)),
+        rod: rodId || null,
+        rodPlus: getEquippedRodPlus(),
+        isSOSRod: Boolean(rodItem && (rodItem.isSOS || rodItem.isRoyal))
+    };
 }
 
 // Oyuncunun toplam balıkçılık bonuslarını hesapla (Olta + Kostüm + Efsunlar + Yem + Yemek Buff + Pasif Yetenekler)
@@ -3711,6 +3749,7 @@ function handleInventoryItemClick(invEntry) {
             const plusStr = e.count > 0 ? ` (+${e.count})` : '';
             showToast(`${item.name}${plusStr} kuşandı!`, '#52b788');
         }
+        syncPlayerProfileToNetwork();
         renderInventoryUI();
         renderBuffBar();
     } else if (item.type === 'costume') {
@@ -3728,6 +3767,7 @@ function handleInventoryItemClick(invEntry) {
             const plusStr = e && e.count > 0 ? ` (+${e.count})` : '';
             showToast(`${item.name}${plusStr} kuşandı!`, '#52b788');
         }
+        syncPlayerProfileToNetwork();
         renderInventoryUI();
         renderBuffBar();
     } else if (item.type === 'bait') {
@@ -3841,16 +3881,22 @@ function renderInventoryUI() {
                 const eqEntry = getEquippedRodEntry();
                 const e = getEntryEnchants(eqEntry);
                 nameEl.textContent = e.count > 0 ? `${item.name} (+${e.count})` : item.name;
+                if (e.count >= 7) slotEl.classList.add('plus7-slot');
+                else slotEl.classList.remove('plus7-slot');
             } else if (slotType === 'costume') {
                 const eqEntry = getEquippedCostumeEntry();
                 const e = getEntryEnchants(eqEntry);
                 nameEl.textContent = e && e.count > 0 ? `${item.name} (+${e.count})` : item.name;
+                if (e && e.count >= 7) slotEl.classList.add('plus7-slot');
+                else slotEl.classList.remove('plus7-slot');
             } else {
                 nameEl.textContent = item.name;
+                slotEl.classList.remove('plus7-slot');
             }
         } else {
             slotEl.classList.remove('equipped');
             slotEl.classList.remove('sos-slot');
+            slotEl.classList.remove('plus7-slot');
             nameEl.textContent = 'Boş (Çıkarıldı)';
         }
     });
@@ -3958,9 +4004,10 @@ function renderInventoryUI() {
                 const e = getEntryEnchants(invEntry);
                 if (e && e.count > 0) {
                     const eb = document.createElement('span');
-                    eb.className = 'enchant-badge';
+                    eb.className = e.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                     eb.textContent = `+${e.count}`;
                     slotDiv.appendChild(eb);
+                    if (e.count >= 7) slotDiv.classList.add('plus7-slot');
                 }
             }
 
@@ -4491,9 +4538,10 @@ function renderMarketBuyTab(tabContainer, mainContainer) {
         }
         if ((it.type === 'rod' || it.type === 'costume') && l.enchants && l.enchants.count > 0) {
             const enchBadge = document.createElement('span');
-            enchBadge.className = 'enchant-badge';
+            enchBadge.className = l.enchants.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
             enchBadge.textContent = `+${l.enchants.count}`;
             iconWrap.appendChild(enchBadge);
+            if (l.enchants.count >= 7) iconWrap.classList.add('plus7-slot');
         }
 
         const plusStr = (l.enchants && l.enchants.count > 0) ? ` (+${l.enchants.count})` : '';
@@ -4634,9 +4682,10 @@ function renderMarketSellTab(tabContainer, mainContainer) {
                 const e = getEntryEnchants(entry);
                 if (e && e.count > 0) {
                     const eb = document.createElement('span');
-                    eb.className = 'enchant-badge';
+                    eb.className = e.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                     eb.textContent = `+${e.count}`;
                     slotDiv.appendChild(eb);
+                    if (e.count >= 7) slotDiv.classList.add('plus7-slot');
                 }
             }
 
@@ -5037,9 +5086,10 @@ function renderStorageModal(container) {
             }
             if ((item.type === 'rod' || item.type === 'costume') && entry.enchants && entry.enchants.count > 0) {
                 const eb = document.createElement('span');
-                eb.className = 'enchant-badge';
+                eb.className = entry.enchants.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                 eb.textContent = `+${entry.enchants.count}`;
                 slotDiv.appendChild(eb);
+                if (entry.enchants.count >= 7) slotDiv.classList.add('plus7-slot');
             }
             if (item.isRoyal || item.isSOS) {
                 slotDiv.classList.add('sos-slot');
@@ -5080,9 +5130,10 @@ function renderStorageModal(container) {
                 const e = getEntryEnchants(entry);
                 if (e && e.count > 0) {
                     const eb = document.createElement('span');
-                    eb.className = 'enchant-badge';
+                    eb.className = e.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                     eb.textContent = `+${e.count}`;
                     slotDiv.appendChild(eb);
+                    if (e.count >= 7) slotDiv.classList.add('plus7-slot');
                 }
             }
             if (item.isRoyal || item.isSOS) {
@@ -5938,7 +5989,7 @@ function renderAnvilModal(container) {
         detailsArea.innerHTML = `
             <div class="empty-notice" style="padding:10px 8px; font-size:11.5px; line-height:1.4;">
                 Örste henüz eşya yok. Sağdaki <b>Envanterinden</b> + basmak istediğin <b>Olta veya Kostüme</b> tıkla.<br>
-                <span style="color:#ffd166; font-size:11px;">(Tüm oltalar ve kostümler Efsun Kağıtları ile +5 seviyesine kadar güçlendirilebilir!)</span>
+                <span style="color:#ffd166; font-size:11px;">(Tüm oltalar ve kostümler Efsun Kağıtları ile +7 seviyesine kadar güçlendirilebilir! +3'e kadar güvenlidir, +4 ve sonrasında korumasız başarısızlıkta eşya kaybolur!)</span>
             </div>
         `;
     } else {
@@ -5947,15 +5998,18 @@ function renderAnvilModal(container) {
         if (guildAlchemistBonus > 0) bonusParts.push(`+%${guildAlchemistBonus.toFixed(1)} Lonca`);
         if (costumeAnvilBonus > 0) bonusParts.push(`+%${costumeAnvilBonus} Kraliyet`);
         const patronBonusText = bonusParts.length > 0 ? ` <span style="color:#ffd166;">(%${baseChance} Temel ${bonusParts.join(' ')})</span>` : '';
-        const protectStatusText = protectItem
-            ? `<div style="margin-top:4px; font-size:12px; color:#00f5d4; font-weight:600;">
-                   🛡️ <b>Yükseltme Koruması AKTİF!</b> Başarılı olursa parşömen harcanmaz. Başarısız olursa parşömen harcanır ve eşya silinmek yerine +0'a düşer.
+        const isSafeZone = currentStep < 3;
+        const protectStatusText = isSafeZone
+            ? `<div style="margin-top:4px; font-size:12px; color:#80ed99; font-weight:600;">
+                   🛡️ <b>GÜVENLİ BÖLGE (+3'e kadar):</b> Efsun başarısız olsa bile eşya parçalanmaz ve yok olmaz!
                </div>`
-            : `<div style="margin-top:4px; font-size:11.5px; color:#ffb3c1;">
-                   ${GAME_RULES.destroyRodOnFail
-                       ? `⚠️ <b>Korumasız Basım:</b> Efsun başarısız olursa <b>${targetItem.name} parçalanır ve yok olur!</b> (3. Slota Koruma Parşömeni koyarak eşyanı güvenceye alabilirsin)`
-                       : `🛡️ Güvenli Mod Aktif: Başarısız olursa eşya silinmez.`}
-               </div>`;
+            : (protectItem
+                ? `<div style="margin-top:4px; font-size:12px; color:#00f5d4; font-weight:600;">
+                       🛡️ <b>Yükseltme Koruması AKTİF!</b> Başarılı olursa parşömen harcanmaz. Başarısız olursa parşömen harcanır ve eşya silinmek yerine +0'a düşer.
+                   </div>`
+                : `<div style="margin-top:4px; font-size:11.5px; color:#ffb3c1;">
+                       ⚠️ <b>TEHLİKELİ BÖLGE (+4 ve üzeri):</b> Efsun başarısız olursa <b>${targetItem.name} parçalanır ve tamamen yok olur!</b> (3. Slota Koruma Parşömeni koyarak eşyanı güvenceye alabilirsin)
+                   </div>`);
 
         const rateHtml = currentStep >= MAX_ENCHANT_COUNT
             ? `<div class="anvil-rate-box" style="border-color:#80ed99; color:#80ed99; background:rgba(82,183,136,0.15);">
@@ -6009,9 +6063,10 @@ function renderAnvilModal(container) {
                 const e = getEntryEnchants(entry);
                 if (e && e.count > 0) {
                     const eb = document.createElement('span');
-                    eb.className = 'enchant-badge';
+                    eb.className = e.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                     eb.textContent = `+${e.count}`;
                     slotDiv.appendChild(eb);
+                    if (e.count >= 7) slotDiv.classList.add('plus7-slot');
                 }
             }
 
@@ -6117,15 +6172,30 @@ function renderAnvilModal(container) {
                         }
 
                         if (rodSlot) rodSlot.classList.add('flash-success');
-                        if (textEl) textEl.textContent = `✨ BAŞARILI! (${targetItem.name} +${e.count}) ✨`;
-                        upBtn.style.borderColor = '#80ed99';
-                        upBtn.style.color = '#80ed99';
-                        showToast(`✨ BAŞARILI! ${targetItem.name} (+${e.count}) efsunlandı!${hasProtection ? ' (Koruma Parşömeni korundu)' : ''}`, '#80ed99');
+                        if (e.count >= 7) {
+                            if (textEl) textEl.textContent = `🔥 EFSANEVİ +7 BAŞARILI! 🔥`;
+                            upBtn.style.borderColor = '#ff5400';
+                            upBtn.style.color = '#ffd166';
+                            showToast(`🔥 EFSANEVİ GELİŞTİRME! [${targetItem.name} +7] başardın! Ortam alev alıyor!`, '#ff5400', 7000);
+                            addChatMessage('Örs', `🔥 TEBRİKLER! [${player.name}] +7 ${targetItem.name} bastı! Efsanevi alevler etrafı sarıyor!`, '#ff5400');
+                        } else {
+                            if (textEl) textEl.textContent = `✨ BAŞARILI! (${targetItem.name} +${e.count}) ✨`;
+                            upBtn.style.borderColor = '#80ed99';
+                            upBtn.style.color = '#80ed99';
+                            showToast(`✨ BAŞARILI! ${targetItem.name} (+${e.count}) efsunlandı!${hasProtection ? ' (Koruma Parşömeni korundu)' : ''}`, '#80ed99');
+                        }
+                        syncPlayerProfileToNetwork();
                     } else {
                         if (rodSlot) rodSlot.classList.add('smoke-failed');
 
-                        if (hasProtection) {
-                            // Koruma parşömeni yalnızca başarısızlıkta harcanarak eşyayı kurtarır, eşya +0'a düşer
+                        if (currentStep < 3) {
+                            // +3'e kadar yansa bile item kaybolmaz!
+                            if (textEl) textEl.textContent = `⚠️ Efsun Başarısız! (Güvenli Bölge: Eşya Korundu)`;
+                            upBtn.style.borderColor = '#ffd166';
+                            upBtn.style.color = '#ffd166';
+                            showToast(`⚠️ Efsun başarısız oldu! +3'e kadar Güvenli Bölge olduğu için ${targetItem.name} yok olmadı!`, '#ffbe0b');
+                        } else if (hasProtection) {
+                            // +4 ve sonrasında koruma parşömeni eşyayı kurtarır (+0'a düşürür)
                             removeItemFromInventory('scroll_protection', 1);
 
                             const resetEnch = { count: 0, luck: 0, speed: 0, control: 0 };
@@ -6142,33 +6212,29 @@ function renderAnvilModal(container) {
                             upBtn.style.borderColor = '#ffd166';
                             upBtn.style.color = '#ffd166';
                             showToast(`🛡️ KORUMA DEVREYE GİRDİ! Parşömen harcandı; ${targetItem.name} silinmedi ancak +0 seviyesine düştü!`, '#ffbe0b');
+                            syncPlayerProfileToNetwork();
                         } else {
-                            if (GAME_RULES.destroyRodOnFail) {
-                                const brokenName = `${targetItem.name}${currentStep > 0 ? ` (+${currentStep})` : ''}`;
-                                if (targetItem.type === 'costume') {
-                                    if (player.equipped.costume === targetItem.id) {
-                                        player.equipped.costume = null;
-                                        player.equipped.costumeUid = null;
-                                    }
-                                } else if (targetItem.type === 'rod') {
-                                    if (player.equipped.rodUid === selectedItemEntry.uid || player.equipped.rod === targetItem.id) {
-                                        player.equipped.rod = null;
-                                        player.equipped.rodUid = null;
-                                    }
+                            // +4 ve sonrasında korumasız: item parçalanır ve yok olur!
+                            const brokenName = `${targetItem.name} (+${currentStep})`;
+                            if (targetItem.type === 'costume') {
+                                if (player.equipped.costume === targetItem.id) {
+                                    player.equipped.costume = null;
+                                    player.equipped.costumeUid = null;
                                 }
-                                removeItemByUid(selectedItemEntry.uid);
-                                anvilState.itemUid = null;
-                                anvilState.rodUid = null;
-                                if (textEl) textEl.textContent = `💥 YANDI! ${brokenName} parçalandı! 💥`;
-                                upBtn.style.borderColor = '#d90429';
-                                upBtn.style.color = '#ffb3c1';
-                                showToast(`💥 EFSUN BAŞARISIZ OLDU! ${brokenName} parçalandı ve tamamen silindi!`, '#ff595e');
-                            } else {
-                                if (textEl) textEl.textContent = `⚠️ Efsun başarısız oldu! (${targetItem.typeName || 'Eşya'} korundu)`;
-                                upBtn.style.borderColor = '#d90429';
-                                upBtn.style.color = '#ffb3c1';
-                                showToast(`⚠️ Efsun başarısız oldu! (${targetItem.name} korundu)`, '#ffbe0b');
+                            } else if (targetItem.type === 'rod') {
+                                if (player.equipped.rodUid === selectedItemEntry.uid || player.equipped.rod === targetItem.id) {
+                                    player.equipped.rod = null;
+                                    player.equipped.rodUid = null;
+                                }
                             }
+                            removeItemByUid(selectedItemEntry.uid);
+                            anvilState.itemUid = null;
+                            anvilState.rodUid = null;
+                            if (textEl) textEl.textContent = `💥 YANDI! ${brokenName} parçalandı! 💥`;
+                            upBtn.style.borderColor = '#d90429';
+                            upBtn.style.color = '#ffb3c1';
+                            showToast(`💥 EFSUN BAŞARISIZ OLDU! Tehlikeli bölgede (+4+) efsun yandı: ${brokenName} parçalanarak yok oldu!`, '#ff595e', 5000);
+                            syncPlayerProfileToNetwork();
                         }
                     }
 
@@ -7949,9 +8015,10 @@ function renderGuildStorageModal(container) {
             }
             if ((item.type === 'rod' || item.type === 'costume') && entry.enchants && entry.enchants.count > 0) {
                 const eb = document.createElement('span');
-                eb.className = 'enchant-badge';
+                eb.className = entry.enchants.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                 eb.textContent = `+${entry.enchants.count}`;
                 slotDiv.appendChild(eb);
+                if (entry.enchants.count >= 7) slotDiv.classList.add('plus7-slot');
             }
             if (item.isRoyal || item.isSOS) {
                 slotDiv.classList.add('sos-slot');
@@ -7994,9 +8061,10 @@ function renderGuildStorageModal(container) {
                 const e = getEntryEnchants(entry);
                 if (e && e.count > 0) {
                     const eb = document.createElement('span');
-                    eb.className = 'enchant-badge';
+                    eb.className = e.count >= 7 ? 'enchant-badge plus-7' : 'enchant-badge';
                     eb.textContent = `+${e.count}`;
                     slotDiv.appendChild(eb);
+                    if (e.count >= 7) slotDiv.classList.add('plus7-slot');
                 }
             }
             if (item.isRoyal || item.isSOS) {
@@ -11543,16 +11611,29 @@ function drawCrewMemberSprite(g, mx, my, coatColor, hatColor, nameLabel, isFishi
     }
 }
 
-function drawSmoothCharacter(g, x, y, isPreview = false) {
-    const costume = player.equipped.costume ? ITEMS[player.equipped.costume] : null;
+function drawSmoothCharacter(g, x, y, isPreview = false, customData = null) {
+    const isRemote = Boolean(customData);
+    const costumeId = isRemote ? (customData.costume || 'costume_fisher') : (player.equipped ? player.equipped.costume : 'costume_fisher');
+    const costume = costumeId ? ITEMS[costumeId] : null;
     const shirtColor = costume ? costume.shirt : '#6c757d';
     const vestColor = costume ? costume.vest : '#495057';
     const pantsColor = costume ? costume.pants : '#2b2d42';
     const hatType = costume ? costume.hat : 'none';
 
-    const isMoving = !isPreview && player.path.length > 0;
+    const isMoving = isRemote ? Boolean(customData.isMoving) : (!isPreview && player.path.length > 0);
     const isBoatMode = !isPreview && (currentMapId === 'akdeniz' || currentMapId === 'kraken');
-    const activeBoat = isBoatMode ? (currentMapId === 'kraken' ? (BOATS.boat_destroyer || BOATS.boat_boat) : (BOATS[player.activeBoatId] || BOATS.boat_boat)) : null;
+    const boatId = isRemote ? customData.boatId : player.activeBoatId;
+    const activeBoat = isBoatMode ? (currentMapId === 'kraken' ? (BOATS.boat_destroyer || BOATS.boat_boat) : (BOATS[boatId] || BOATS.boat_boat)) : null;
+
+    const costumePlus = isRemote ? (Number(customData.costumePlus) || 0) : getEquippedCostumePlus();
+    const rodId = isRemote ? customData.rod : (player.equipped ? player.equipped.rod : null);
+    const rodItem = rodId ? ITEMS[rodId] : null;
+    const rodPlus = isRemote ? (Number(customData.rodPlus) || 0) : getEquippedRodPlus();
+    const isSOSRod = isRemote ? Boolean(customData.isSOSRod) : Boolean(rodItem && (rodItem.isSOS || rodItem.isRoyal));
+    const isSOSCostume = isRemote ? Boolean(customData.isSOSCostume) : Boolean(costume && (costume.isSOS || costume.isRoyal));
+    const isRoyal = isRemote ? Boolean(customData.isRoyalCostume || (costume && costume.isRoyal)) : Boolean(costume && (costume.id === 'costume_royal_guard' || costume.isRoyal));
+
+    const lookRight = isPreview ? true : (isRemote ? (customData.dirX >= customData.dirY) : (player.dirX >= player.dirY));
 
     // Tekne modu: Karakter teknenin içinde oturur / sürer
     if (isBoatMode && activeBoat) {
@@ -11567,7 +11648,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
 
         // Tekne Gövdesi (Hull)
         if (activeBoat.id === 'boat_raft') {
-            // Ahşap Sal
             g.fillStyle = activeBoat.hullColor || '#8c6239';
             for (let lx = -22; lx <= 18; lx += 8) {
                 g.beginPath();
@@ -11581,11 +11661,9 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.moveTo(x - 24, bY + 8); g.lineTo(x + 24, bY + 8);
             g.stroke();
         } else if (activeBoat.id === 'boat_destroyer') {
-            // DEVA SA LONCA DESTROYER'İ (Zırhlı Gövde, Pruva Mahmuzu, Çift Yelken & Güvertedeki Lonca Mürettebatı)
             drawGuildDestroyerWithCrew(g, x, y, bY);
             return;
         } else if (activeBoat.id === 'boat_minnkota') {
-            // Minnkota'lı Balıkçı Teknesi (Koyu Çelik Gövde, Neon Çizgiler, Burunda Trolling Motoru)
             g.fillStyle = activeBoat.hullColor || '#0b1d3a';
             g.beginPath();
             g.moveTo(x - 28, bY - 4);
@@ -11595,7 +11673,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.closePath();
             g.fill();
 
-            // Neon Turkuaz Kabin
             g.fillStyle = activeBoat.accentColor || '#00f5d4';
             g.beginPath();
             g.moveTo(x - 14, bY - 6);
@@ -11605,7 +11682,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.closePath();
             g.fill();
 
-            // Burun Minn Kota Trolling Motoru ve GPS Çapası
             g.fillStyle = '#00f5d4';
             g.beginPath();
             g.arc(x + 28, bY - 12, 3.5, 0, Math.PI * 2);
@@ -11617,13 +11693,11 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.lineTo(x + 28, bY);
             g.stroke();
 
-            // Minnkota Tekne ismi rozeti
             g.font = 'bold 9.5px "Segoe UI", sans-serif';
             g.fillStyle = '#00f5d4';
             g.textAlign = 'center';
             g.fillText('⚡ ' + activeBoat.name, x, bY + 19);
         } else {
-            // Tekne / Yat / Sürat Teknesi
             g.fillStyle = activeBoat.hullColor || '#457b9d';
             g.beginPath();
             g.moveTo(x - 26, bY - 4);
@@ -11633,7 +11707,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.closePath();
             g.fill();
 
-            // Detay / Çizgi / Kabin
             g.fillStyle = activeBoat.accentColor || '#f1faee';
             g.beginPath();
             g.moveTo(x - 12, bY - 6);
@@ -11643,7 +11716,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.closePath();
             g.fill();
 
-            // Tekne ismi rozeti
             g.font = 'bold 9.5px "Segoe UI", sans-serif';
             g.fillStyle = '#ffffff';
             g.textAlign = 'center';
@@ -11651,10 +11723,11 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         }
     }
 
+    const walkCycleValue = isRemote ? globalTime * 8 : player.walkCycle * 9;
     const bob = isBoatMode
         ? Math.sin(globalTime * 3.2 + x) * 2
-        : (isMoving ? Math.abs(Math.sin(player.walkCycle * 9)) * 4 : Math.sin(globalTime * 2.5) * 1.2);
-    const stride = (isMoving && !isBoatMode) ? Math.sin(player.walkCycle * 9) * 5 : 0;
+        : (isMoving ? Math.abs(Math.sin(walkCycleValue)) * 4 : Math.sin(globalTime * 2.5) * 1.2);
+    const stride = (isMoving && !isBoatMode) ? Math.sin(walkCycleValue) * 5 : 0;
 
     if (!isBoatMode) {
         g.fillStyle = 'rgba(0, 0, 0, 0.32)';
@@ -11675,10 +11748,61 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
 
     const bodyY = (isBoatMode ? (y - 18 - bob) : (y - 28 - bob));
 
-    // KRALİYET MUHAFIZI KOSTÜMÜ: Görkemli Pelerin, Altın Zırh Omuzlukları ve Parlama Aurası
-    if (costume && (costume.id === 'costume_royal_guard' || costume.isRoyal)) {
+    // +7 EFSANEVİ ZEMİN MÜHRÜ VE DÖNEN YANARLI AURALAR (Hem Karakter Hem Diğer Oyuncular İçin)
+    if (!isPreview && (rodPlus >= 7 || costumePlus >= 7)) {
         g.save();
-        // 1. Karakterin arkasındaki kraliyet safiri pelerin
+        const t = globalTime * 3.6;
+        const pulse = Math.sin(t * 1.8) * 3;
+        const hue = (globalTime * 100) % 360;
+
+        // 1. Zemin Dönen Çift Rün Halkası
+        g.strokeStyle = `hsl(${hue}, 100%, 65%)`;
+        g.lineWidth = 2.8;
+        g.beginPath();
+        g.ellipse(x, y + 2, 24 + pulse, 11 + pulse * 0.45, 0, 0, Math.PI * 2);
+        g.stroke();
+
+        g.strokeStyle = 'rgba(255, 209, 102, 0.9)';
+        g.lineWidth = 1.8;
+        g.beginPath();
+        g.ellipse(x, y + 2, 16 - pulse * 0.3, 7 - pulse * 0.15, 0, 0, Math.PI * 2);
+        g.stroke();
+
+        // 2. Dönen 6 Alev/Işık Işını ve Yıldız Uçları
+        for (let i = 0; i < 6; i++) {
+            const ang = t + (i * Math.PI / 3);
+            const dist = 22 + Math.sin(t * 2 + i) * 3;
+            const sx = x + Math.cos(ang) * dist;
+            const sy = (y + 2) + Math.sin(ang) * (dist * 0.45);
+            const pColor = (i % 2 === 0) ? '#ff0055' : '#ffd166';
+            drawSilkroadSparkle(g, sx, sy, 3.8 + Math.sin(t * 4 + i) * 1.5, pColor);
+        }
+
+        // 3. Omuzlardan ve Gövdeden Gökyüzüne Yükselen Efsanevi Alev Parçacıkları
+        for (let k = 0; k < 3; k++) {
+            const prog = ((globalTime * 1.8 + k * 0.33) % 1.0);
+            const sparkX = x + Math.sin(globalTime * 6 + k * 2) * (8 + k * 4);
+            const sparkY = (bodyY + 12) - prog * 34;
+            const sparkSize = (1 - prog) * 3.5;
+            const spkHue = (globalTime * 100 + k * 80) % 360;
+            drawSilkroadSparkle(g, sparkX, sparkY, sparkSize, `hsl(${spkHue}, 100%, 70%)`);
+        }
+        g.restore();
+    } else if (!isPreview && (rodPlus >= 4 || costumePlus >= 4)) {
+        // +4 - +6: Mistik Mor / Elektrik Aurası
+        g.save();
+        const auraT = globalTime * 3;
+        g.strokeStyle = 'rgba(160, 60, 255, 0.6)';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.ellipse(x, y + 2, 18 + Math.sin(auraT) * 2, 8 + Math.sin(auraT) * 1, 0, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
+    }
+
+    // KRALİYET MUHAFIZI KOSTÜMÜ: Görkemli Pelerin, Altın Zırh Omuzlukları ve Parlama Aurası
+    if (isRoyal) {
+        g.save();
         g.fillStyle = '#03045e';
         g.beginPath();
         g.moveTo(x - 10, bodyY + 3);
@@ -11691,7 +11815,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.lineWidth = 1.5;
         g.stroke();
 
-        // 2. Yerde dönen parıldayan kraliyet halesi (Altın & Safir)
         if (!isPreview) {
             const auraT = globalTime * 3.5;
             const pulse = Math.sin(auraT * 1.5) * 2.5;
@@ -11707,7 +11830,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.ellipse(x, y + 1, 14 - pulse * 0.4, 6 - pulse * 0.2, 0, 0, Math.PI * 2);
             g.stroke();
 
-            // Karakter etrafında süzülen 4 parıldayan yıldız
             for (let i = 0; i < 4; i++) {
                 const ang = auraT + (i * Math.PI / 2);
                 const rx = 18 + Math.sin(auraT * 2 + i) * 3;
@@ -11718,7 +11840,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
                 drawSilkroadSparkle(g, sx, sy, 3.2 + Math.sin(auraT * 3 + i) * 1.2, col);
             }
 
-            // Omuzlardan yükselen altın ışıltılar
             const s1Y = (bodyY - 4) - ((globalTime * 24) % 28);
             const s1X = x - 7 + Math.sin(globalTime * 5) * 3;
             drawSilkroadSparkle(g, s1X, s1Y, 2.2, '#ffffff');
@@ -11741,8 +11862,7 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
     g.roundRect(x + 3, bodyY + 1, 6, 16, 3);
     g.fill();
 
-    // Kraliyet Muhafızı Altın Omuzlukları (Pauldrons)
-    if (costume && (costume.id === 'costume_royal_guard' || costume.isRoyal)) {
+    if (isRoyal) {
         g.fillStyle = '#ffd166';
         g.beginPath();
         g.arc(x - 11, bodyY + 4, 3.5, 0, Math.PI * 2);
@@ -11759,7 +11879,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
     g.arc(x, headY, 10.5, 0, Math.PI * 2);
     g.fill();
 
-    const lookRight = isPreview ? true : (player.dirX >= player.dirY);
     const eyeOffsetX = lookRight ? 2.5 : -2.5;
     g.fillStyle = '#1d1e2c';
     g.beginPath();
@@ -11800,7 +11919,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.arc(x, headY, 11.5, Math.PI * 0.8, Math.PI * 0.2);
         g.stroke();
     } else if (hatType === 'sailor') {
-        // Deniz Kurdu Beresi / Kepi
         g.fillStyle = '#1d3557';
         g.beginPath();
         g.ellipse(x, headY - 6, 13, 5, 0, 0, Math.PI * 2);
@@ -11814,14 +11932,12 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.arc(x, headY - 7, 2.5, 0, Math.PI * 2);
         g.fill();
     } else if (hatType === 'bandana') {
-        // Karayip Yağmacısı Korsan Bandanası
         g.fillStyle = '#9d0208';
         g.beginPath();
         g.arc(x, headY - 3, 11, Math.PI, 0);
         g.fill();
         g.fillStyle = '#ba181b';
         g.fillRect(x - 11, headY - 4, 22, 4);
-        // Arkadan sarkan bandana ucu
         g.beginPath();
         g.moveTo(x + 9, headY - 2);
         g.lineTo(x + 14, headY + 6);
@@ -11829,7 +11945,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.closePath();
         g.fill();
     } else if (hatType === 'diving') {
-        // Derin Su Dalgıcı Pirinç Miğferi
         g.fillStyle = '#d4a373';
         g.beginPath();
         g.arc(x, headY - 1, 11.5, 0, Math.PI * 2);
@@ -11837,7 +11952,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.strokeStyle = '#b08968';
         g.lineWidth = 2;
         g.stroke();
-        // Cam gözetleme lumbozu
         g.fillStyle = '#a2d2ff';
         g.beginPath();
         g.arc(x + (lookRight ? 3 : -3), headY - 1, 4.5, 0, Math.PI * 2);
@@ -11846,7 +11960,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.lineWidth = 1.2;
         g.stroke();
     } else if (hatType === 'feather_pirate') {
-        // Barbaros Korsan Zırhı / Tüylü Kaptan Tricornu
         g.fillStyle = '#03071e';
         g.beginPath();
         g.moveTo(x - 17, headY - 5);
@@ -11856,7 +11969,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.strokeStyle = '#ffb703';
         g.lineWidth = 2;
         g.stroke();
-        // Gösterişli Kızıl Tüy
         g.strokeStyle = '#d90429';
         g.lineWidth = 3.5;
         g.beginPath();
@@ -11864,7 +11976,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.quadraticCurveTo(x - 14, headY - 24, x - 18, headY - 16);
         g.stroke();
     } else if (hatType === 'bucket') {
-        // Usta Olta Balıkçısı Şapkası
         g.fillStyle = '#606c38';
         g.beginPath();
         g.ellipse(x, headY - 5, 15, 5, 0, 0, Math.PI * 2);
@@ -11874,12 +11985,10 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.arc(x, headY - 6, 9, Math.PI, 0);
         g.fill();
     } else if (hatType === 'royal_helm') {
-        // Görkemli Kraliyet Muhafızı Altın Tacı / Miğferi
         g.fillStyle = '#ffd166';
         g.beginPath();
         g.arc(x, headY - 4, 11, Math.PI, 0);
         g.fill();
-        // 3 Taç ucu
         g.beginPath();
         g.moveTo(x - 10, headY - 4);
         g.lineTo(x - 10, headY - 14);
@@ -11893,7 +12002,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.strokeStyle = '#d4a373';
         g.lineWidth = 1.5;
         g.stroke();
-        // Ortadaki parıldayan safir mücevher
         g.fillStyle = '#00f5d4';
         g.beginPath();
         g.arc(x, headY - 8, 2.5, 0, Math.PI * 2);
@@ -11905,13 +12013,92 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.fill();
     }
 
-    const rodItem = player.equipped.rod ? ITEMS[player.equipped.rod] : null;
+    // KUŞANILAN SİLAH / OLTA VE PARLAMA / +7 EFSANEVİ EFEKTLERİ
     if (rodItem) {
         const handX = x + 9;
         const handY = bodyY + 9;
         const tipX = handX + 22;
         const tipY = handY - 24;
 
+        // 1. +7 EFSANEVİ SİLAH AURA (Ateşli, Yanarlı Dönerli, Büyüleyici Plazma & Alevler)
+        if (rodPlus >= 7) {
+            g.save();
+            const flameT = globalTime * 4.5;
+            const hue = (globalTime * 120) % 360;
+
+            // Dış Katman: Devasa Parlayan Neon Plazma
+            g.strokeStyle = `hsla(${hue}, 100%, 65%, 0.45)`;
+            g.lineWidth = 11;
+            g.lineCap = 'round';
+            g.beginPath();
+            g.moveTo(handX - 2, handY + 3);
+            g.quadraticCurveTo(handX + 8, handY - 12, tipX, tipY);
+            g.stroke();
+
+            // Orta Katman: Parlak Alev Çizgisi
+            g.strokeStyle = `hsla(${(hue + 40) % 360}, 100%, 75%, 0.8)`;
+            g.lineWidth = 6;
+            g.stroke();
+
+            // Çekirdek: Saf Beyaz/Altın Işık
+            g.strokeStyle = '#ffffff';
+            g.lineWidth = 2.4;
+            g.stroke();
+
+            // Uçta Dönen 4'lü Plazma Yıldızı ve Şok Halesi
+            const flarePulse = 6.5 + Math.sin(flameT * 3) * 2.5;
+            g.strokeStyle = `hsl(${(hue + 80) % 360}, 100%, 75%)`;
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(tipX, tipY, flarePulse, 0, Math.PI * 2);
+            g.stroke();
+
+            for (let i = 0; i < 4; i++) {
+                const ang = flameT * 1.5 + (i * Math.PI / 2);
+                const oDist = 9 + Math.sin(flameT * 2 + i) * 3;
+                const ox = tipX + Math.cos(ang) * oDist;
+                const oy = tipY + Math.sin(ang) * oDist;
+                drawSilkroadSparkle(g, ox, oy, 4.2 + Math.sin(flameT * 4 + i) * 1.5, (i % 2 === 0 ? '#ff0055' : '#ffd166'));
+            }
+
+            // Gövdeden Uca Doğru Süzülen Parlayan Enerji Küresi
+            const orbProg = (globalTime * 2.2) % 1.0;
+            const orbX = (handX - 2) * (1 - orbProg) + tipX * orbProg;
+            const orbY = (handY + 3) * (1 - orbProg) + tipY * orbProg - Math.sin(orbProg * Math.PI) * 7;
+            drawSilkroadSparkle(g, orbX, orbY, 3.8, '#ffffff');
+
+            g.restore();
+        } else if (rodPlus >= 4) {
+            // +4 - +6: Mor / Elektrik Camgöbeği Enerji Aurası
+            g.save();
+            g.strokeStyle = 'rgba(160, 60, 255, 0.45)';
+            g.lineWidth = 6.5;
+            g.lineCap = 'round';
+            g.beginPath();
+            g.moveTo(handX - 2, handY + 3);
+            g.quadraticCurveTo(handX + 8, handY - 12, tipX, tipY);
+            g.stroke();
+
+            g.strokeStyle = 'rgba(0, 245, 212, 0.75)';
+            g.lineWidth = 3;
+            g.stroke();
+
+            g.beginPath();
+            g.arc(tipX, tipY, 5 + Math.sin(globalTime * 5) * 1.8, 0, Math.PI * 2);
+            g.stroke();
+            g.restore();
+        } else if (rodPlus >= 1) {
+            // +1 - +3: Zarif Altın Parıltısı
+            g.save();
+            g.strokeStyle = 'rgba(255, 209, 102, 0.75)';
+            g.lineWidth = 2;
+            g.beginPath();
+            g.arc(tipX, tipY, 4 + Math.sin(globalTime * 5) * 1.5, 0, Math.PI * 2);
+            g.stroke();
+            g.restore();
+        }
+
+        // Normal Gövde Çizimi
         g.strokeStyle = rodItem.rodColor;
         g.lineWidth = 3.2;
         g.lineCap = 'round';
@@ -11930,20 +12117,9 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.arc(tipX, tipY, 2.5, 0, Math.PI * 2);
         g.fill();
 
-        const eqRodEntry = getEquippedRodEntry();
-        const ench = eqRodEntry ? getEntryEnchants(eqRodEntry) : player.rodEnchants[rodItem.id];
-        if (ench && ench.count > 0) {
-            g.strokeStyle = 'rgba(255, 190, 11, 0.65)';
-            g.lineWidth = 1.5;
-            g.beginPath();
-            g.arc(tipX, tipY, 4.5 + Math.sin(globalTime * 6) * 1.5, 0, Math.PI * 2);
-            g.stroke();
-        }
-
-        if (rodItem.isSOS) {
-            // Silkroad Online SOS (Seal of Star) Parlama ve Yıldız Aura Efekti
+        // SOS (Seal of Star) Parlama ve Yıldız Aura Efekti
+        if (isSOSRod) {
             g.save();
-            // 1. Neon Aura Çizimi (Camgöbeği & Altın Işıma)
             g.strokeStyle = 'rgba(0, 245, 212, 0.45)';
             g.lineWidth = 7.5;
             g.lineCap = 'round';
@@ -11956,7 +12132,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.lineWidth = 4.2;
             g.stroke();
 
-            // 2. Olta ucu etrafında dönen SOS yıldızları
             const t = globalTime * 4.2;
             for (let i = 0; i < 3; i++) {
                 const ang = t + (i * Math.PI * 2 / 3);
@@ -11966,7 +12141,6 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
                 drawSilkroadSparkle(g, sx, sy, 3.6 + Math.sin(t * 3 + i) * 1.2, i % 2 === 0 ? '#ffd166' : '#00f5d4');
             }
 
-            // 3. Olta gövdesi üzerinde süzülen 2 adet parıldayan yıldız
             const prog1 = (Math.sin(globalTime * 3) + 1) / 2;
             const midX1 = (handX - 2) * (1 - prog1) + tipX * prog1;
             const midY1 = (handY + 3) * (1 - prog1) + tipY * prog1 - (1 - 4 * Math.pow(prog1 - 0.5, 2)) * 6;
@@ -11980,7 +12154,7 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.restore();
         }
 
-        if (isPreview || fishing.state === 'IDLE') {
+        if (isPreview || (!isRemote && fishing.state === 'IDLE') || isRemote) {
             g.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             g.lineWidth = 1;
             g.beginPath();
@@ -11990,10 +12164,15 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         }
     }
 
-    // Karakter Adı ve Konuşma Baloncuğu (Sohbet)
+    // Karakter Adı, Rozeti ve Konuşma Baloncuğu
     if (!isPreview) {
-        const charName = player.name || 'Balıkçı';
-        const lvTag = `Lv.${player.level}`;
+        const isGM = isRemote ? (customData.role === 'admin') : Boolean(currentUser && currentUser.role === 'admin');
+        const rawName = isRemote ? (customData.name || customData.charName || 'Gezgin') : (player.name || 'Balıkçı');
+        const charName = (isGM ? '👑 ' : '') + rawName;
+        const charLevel = isRemote ? (customData.level || 1) : player.level;
+        const guildName = isRemote ? customData.guildName : player.guildName;
+        const chatBubble = isRemote ? customData.chatBubble : player.chatBubble;
+        const lvTag = `Lv.${charLevel}`;
 
         g.save();
         g.font = 'bold 11px "Segoe UI", sans-serif';
@@ -12004,16 +12183,16 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         const tagX = x - tagW / 2;
         const tagY = headY - 24;
 
-        // İsimlik zemin kutusu
+        // İsimlik zemin kutusu (+7 varsa alevli altın-turuncu çerçeve)
         g.fillStyle = 'rgba(10, 16, 26, 0.85)';
-        g.strokeStyle = '#ffd166';
-        g.lineWidth = 1.2;
+        g.strokeStyle = (rodPlus >= 7 || costumePlus >= 7) ? '#ff5400' : '#ffd166';
+        g.lineWidth = (rodPlus >= 7 || costumePlus >= 7) ? 1.8 : 1.2;
         g.beginPath();
         g.roundRect(tagX, tagY, tagW, tagH, 9);
         g.fill();
         g.stroke();
 
-        // Seviye (Altın sarısı)
+        // Seviye
         g.shadowColor = 'rgba(0, 0, 0, 0.9)';
         g.shadowBlur = 4;
         g.fillStyle = '#ffd166';
@@ -12021,31 +12200,30 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
         g.textBaseline = 'middle';
         g.fillText(lvTag, tagX + 7, tagY + tagH / 2);
 
-        // İsim (Beyaz)
-        g.fillStyle = '#ffffff';
+        // İsim
+        g.fillStyle = (rodPlus >= 7 || costumePlus >= 7) ? '#ffe3a8' : '#ffffff';
         g.fillText(charName, tagX + 7 + lvW + 4, tagY + tagH / 2);
 
         let topAnchorY = tagY;
 
-        // Lonca İsmi (Adımızın Hemen Üstünde Koyu Sarı Renk)
-        if (player.guildName) {
-            const gText = `⟨ ${player.guildName} ⟩`;
+        // Lonca İsmi
+        if (guildName) {
+            const gText = `⟨ ${guildName} ⟩`;
             g.font = 'bold 10.5px "Segoe UI", sans-serif';
             g.textAlign = 'center';
             g.textBaseline = 'middle';
-            g.fillStyle = '#e5a93c'; // Koyu Sarı (Rich Warm Amber/Gold)
+            g.fillStyle = '#e5a93c';
             g.shadowColor = 'rgba(0, 0, 0, 0.95)';
             g.shadowBlur = 4;
             g.fillText(gText, x, tagY - 9);
             topAnchorY = tagY - 17;
         }
 
-        // Konuşma Baloncuğu (Eğer son zamanlarda chat'e yazdıysa)
-        if (player.chatBubble && player.chatBubble.timer > 0) {
-            const rawText = player.chatBubble.text;
+        // Konuşma Baloncuğu
+        if (chatBubble && chatBubble.timer > 0) {
+            const rawText = chatBubble.text;
             g.font = '600 11.5px "Segoe UI", sans-serif';
 
-            // Metni kelimelere bölerek satırlara ayır
             const words = rawText.split(' ');
             const lines = [];
             let curLine = '';
@@ -12083,7 +12261,7 @@ function drawSmoothCharacter(g, x, y, isPreview = false) {
             g.fill();
             g.stroke();
 
-            // Balon ucu (aşağı isimliğe doğru)
+            // Balon ucu
             g.beginPath();
             g.moveTo(x - 5, bubbleY + bubbleH);
             g.lineTo(x, bubbleY + bubbleH + 6);
@@ -13865,9 +14043,9 @@ function update(dt) {
                         dirX: Number((player.dirX || 1).toFixed(2)),
                         dirY: Number((player.dirY || 0).toFixed(2)),
                         isMoving: false,
-                        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
                         boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null,
-                        guildName: player.guildName || ''
+                        guildName: player.guildName || '',
+                        ...getPlayerEquipmentSyncPayload()
                     });
                 }
             }
@@ -13895,9 +14073,9 @@ function update(dt) {
                         dirX: Number((player.dirX || 1).toFixed(2)),
                         dirY: Number((player.dirY || 0).toFixed(2)),
                         isMoving: true,
-                        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
                         boatId: (currentMapId === 'akdeniz' || currentMapId === 'kraken') ? player.activeBoatId : null,
-                        guildName: player.guildName || ''
+                        guildName: player.guildName || '',
+                        ...getPlayerEquipmentSyncPayload()
                     });
                 }
             }
@@ -14484,141 +14662,7 @@ document.addEventListener('click', (e) => {
 // ============================================================================
 function drawRemotePlayer(g, rp, x, y) {
     if (!rp) return;
-    const costume = rp.costume ? ITEMS[rp.costume] : null;
-    const shirtColor = costume ? costume.shirt : '#6c757d';
-    const vestColor = costume ? costume.vest : '#495057';
-    const pantsColor = costume ? costume.pants : '#2b2d42';
-    const hatType = costume ? costume.hat : 'none';
-
-    // 1. Gölge
-    g.fillStyle = 'rgba(0, 0, 0, 0.28)';
-    g.beginPath();
-    g.ellipse(x, y + 2, 12, 5, 0, 0, Math.PI * 2);
-    g.fill();
-
-    // 2. Bacaklar / Pantolon
-    const bodyY = y - 10;
-    g.fillStyle = pantsColor;
-    g.beginPath();
-    g.roundRect(x - 6, bodyY + 14, 5, 10, 2);
-    g.roundRect(x + 1, bodyY + 14, 5, 10, 2);
-    g.fill();
-
-    // 3. Gövde & Yelek
-    g.fillStyle = shirtColor;
-    g.beginPath();
-    g.roundRect(x - 9, bodyY, 18, 16, 4);
-    g.fill();
-
-    g.fillStyle = vestColor;
-    g.beginPath();
-    g.roundRect(x - 9, bodyY + 1, 6, 16, 3);
-    g.roundRect(x + 3, bodyY + 1, 6, 16, 3);
-    g.fill();
-
-    // 4. Baş
-    const headY = bodyY - 12;
-    g.fillStyle = '#ffcdb2';
-    g.beginPath();
-    g.arc(x, headY, 10.5, 0, Math.PI * 2);
-    g.fill();
-
-    // Gözler
-    const lookRight = (rp.dirX >= rp.dirY);
-    const eyeOffsetX = lookRight ? 2.5 : -2.5;
-    g.fillStyle = '#1d1e2c';
-    g.beginPath();
-    g.arc(x - 3.5 + eyeOffsetX, headY + 1, 1.8, 0, Math.PI * 2);
-    g.arc(x + 3.5 + eyeOffsetX, headY + 1, 1.8, 0, Math.PI * 2);
-    g.fill();
-
-    // Şapka
-    if (hatType === 'straw') {
-        g.fillStyle = '#e9c46a';
-        g.beginPath();
-        g.ellipse(x, headY - 6, 16, 5, 0, 0, Math.PI * 2);
-        g.fill();
-        g.fillStyle = '#f4a261';
-        g.beginPath();
-        g.arc(x, headY - 7, 9.5, Math.PI, 0);
-        g.fill();
-    } else if (hatType === 'pirate' || hatType === 'feather_pirate') {
-        g.fillStyle = '#1d1e2c';
-        g.beginPath();
-        g.moveTo(x - 16, headY - 5);
-        g.quadraticCurveTo(x, headY - 19, x + 16, headY - 5);
-        g.closePath();
-        g.fill();
-        g.fillStyle = '#ffbe0b';
-        g.beginPath();
-        g.arc(x, headY - 9, 3, 0, Math.PI * 2);
-        g.fill();
-    } else if (hatType === 'royal_helm') {
-        g.fillStyle = '#ffd166';
-        g.beginPath();
-        g.arc(x, headY - 4, 11, Math.PI, 0);
-        g.fill();
-    } else {
-        g.fillStyle = '#582f0e';
-        g.beginPath();
-        g.arc(x, headY - 3, 10.5, Math.PI, 0);
-        g.fill();
-    }
-
-    // 5. Olta (Balık Tutuyorsa)
-    if (rp.isFishing) {
-        g.strokeStyle = '#ffd166';
-        g.lineWidth = 2.5;
-        g.beginPath();
-        g.moveTo(x + 9, bodyY + 9);
-        g.lineTo(x + 28, bodyY - 15);
-        g.stroke();
-    }
-
-    // 6. Baş Üstü İsimlik & Seviye & GM Rozeti
-    const isGM = (rp.role === 'admin');
-    const lvTag = `Lv.${rp.level || 1}`;
-    const nameStr = (isGM ? '👑 ' : '') + (rp.name || 'Gezgin');
-
-    g.save();
-    g.font = 'bold 11px "Segoe UI", sans-serif';
-    const lvW = g.measureText(lvTag).width;
-    const nameW = g.measureText(nameStr).width;
-    const tagW = lvW + nameW + 16;
-    const tagH = 18;
-    const tagX = x - tagW / 2;
-    const tagY = headY - 24;
-
-    g.fillStyle = 'rgba(10, 16, 26, 0.85)';
-    g.strokeStyle = isGM ? '#ffd166' : 'rgba(76, 201, 240, 0.55)';
-    g.lineWidth = isGM ? 1.5 : 1.2;
-    g.beginPath();
-    g.roundRect(tagX, tagY, tagW, tagH, 9);
-    g.fill();
-    g.stroke();
-
-    g.fillStyle = isGM ? '#ffd166' : '#4cc9f0';
-    g.textAlign = 'left';
-    g.textBaseline = 'middle';
-    g.fillText(lvTag, tagX + 7, tagY + tagH / 2);
-
-    g.fillStyle = isGM ? '#fff3b0' : '#ffffff';
-    g.fillText(nameStr, tagX + 7 + lvW + 4, tagY + tagH / 2);
-
-    // Lonca / Klan İsmi (Karakterin Başının Üstünde Parlak Koyu Sarı)
-    if (rp.guildName && rp.guildName.trim()) {
-        const gText = `⟨ ${rp.guildName.trim()} ⟩`;
-        g.font = 'bold 10.5px "Segoe UI", sans-serif';
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        g.fillStyle = '#e5a93c';
-        g.shadowColor = 'rgba(0, 0, 0, 0.95)';
-        g.shadowBlur = 4;
-        g.fillText(gText, x, tagY - 9);
-        g.shadowBlur = 0;
-    }
-
-    g.restore();
+    drawSmoothCharacter(g, x, y, false, rp);
 }
 
 // ============================================================================
@@ -14759,10 +14803,10 @@ function sendPlayerJoin() {
         x: Number(player.x.toFixed(2)),
         y: Number(player.y.toFixed(2)),
         mapId: cleanMap,
-        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
         boatId: (cleanMap === 'akdeniz' || cleanMap === 'kraken') ? player.activeBoatId : null,
         level: player.level || 1,
-        guildName: player.guildName || ''
+        guildName: player.guildName || '',
+        ...getPlayerEquipmentSyncPayload()
     });
     console.log(`📡 [Multiplayer] player_join gönderildi: ${charName} (${cleanMap})`);
 }
@@ -14771,9 +14815,9 @@ function syncPlayerProfileToNetwork() {
     if (!socket || !socket.connected) return;
     socket.emit('player_update_profile', {
         guildName: player.guildName || '',
-        costume: player.equipped ? player.equipped.costume : 'costume_fisher',
         level: player.level || 1,
-        boatId: player.activeBoatId || null
+        boatId: player.activeBoatId || null,
+        ...getPlayerEquipmentSyncPayload()
     });
 }
 
@@ -14833,10 +14877,7 @@ function initSocketConnection() {
 
         socket.on('player_profile_updated', (data) => {
             if (data && data.socketId && remotePlayers[data.socketId]) {
-                if (data.guildName !== undefined) remotePlayers[data.socketId].guildName = data.guildName;
-                if (data.costume !== undefined) remotePlayers[data.socketId].costume = data.costume;
-                if (data.level !== undefined) remotePlayers[data.socketId].level = data.level;
-                if (data.boatId !== undefined) remotePlayers[data.socketId].boatId = data.boatId;
+                Object.assign(remotePlayers[data.socketId], data);
             }
         });
 

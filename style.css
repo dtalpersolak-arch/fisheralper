@@ -809,6 +809,41 @@ body, html {
     font-weight: 800;
 }
 
+.enchant-badge.plus-7 {
+    background: linear-gradient(135deg, #ff0055, #ff5400, #ffbe0b, #00f5d4, #7209b7);
+    background-size: 300% 300%;
+    animation: rainbowShift 2.5s ease infinite, pulseGlow 1.2s infinite alternate;
+    color: #ffffff !important;
+    font-weight: 900;
+    text-shadow: 0 0 4px #000;
+    border: 1px solid #ffd166;
+    box-shadow: 0 0 8px rgba(255, 84, 0, 0.85), 0 0 14px rgba(255, 190, 11, 0.7);
+}
+
+.item-slot.plus7-slot,
+.equipment-slot.plus7-slot {
+    border-color: #ff5400 !important;
+    box-shadow: 0 0 14px rgba(255, 84, 0, 0.8), inset 0 0 10px rgba(255, 190, 11, 0.5) !important;
+    animation: legendarySlotPulse 2s infinite alternate;
+}
+
+@keyframes rainbowShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+@keyframes legendarySlotPulse {
+    0% {
+        box-shadow: 0 0 10px rgba(255, 84, 0, 0.6), inset 0 0 6px rgba(255, 190, 11, 0.4);
+        border-color: #ff5400;
+    }
+    100% {
+        box-shadow: 0 0 20px rgba(255, 0, 85, 0.9), inset 0 0 12px rgba(255, 209, 102, 0.7);
+        border-color: #ffd166;
+    }
+}
+
 .item-tooltip {
     background: #0d121b;
     border: 1px solid rgba(200, 155, 110, 0.35);
