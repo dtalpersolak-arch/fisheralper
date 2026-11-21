@@ -281,14 +281,30 @@ const DB = {
             if (typeof parsedData === 'string') {
                 try { parsedData = JSON.parse(parsedData); } catch(e) {}
             }
-            return {
+            const charObj = {
                 id: res.rows[0].id,
                 userId: res.rows[0].user_id,
                 name: res.rows[0].name,
                 ...(parsedData || {})
             };
+            const level = Number(charObj.level) || 1;
+            const spent = Object.values(charObj.skills || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+            const totalPoints = (Number(charObj.skillPoints) || 0) + spent;
+            if (totalPoints < level) {
+                charObj.skillPoints = (Number(charObj.skillPoints) || 0) + (level - totalPoints);
+            }
+            return charObj;
         } else {
             const char = jsonDb.characters[userId];
+            if (char) {
+                const level = Number(char.level) || 1;
+                const spent = Object.values(char.skills || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+                const totalPoints = (Number(char.skillPoints) || 0) + spent;
+                if (totalPoints < level) {
+                    char.skillPoints = (Number(char.skillPoints) || 0) + (level - totalPoints);
+                    saveJsonDb(true);
+                }
+            }
             return char || null;
         }
     },
@@ -732,13 +748,13 @@ app.post('/api/character/create', authMiddleware, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Bu karakter adı başka bir oyuncu tarafından kullanılıyor!' });
         }
 
-        // Varsayılan Başlangıç Karakter Verisi
+        // Varsayılan Başlangıç Karakter Verisi (1. seviyede 1 yetenek puanı ile başlar)
         const initialCharacterData = {
             name: cleanName,
             level: 1,
             exp: 0,
             gold: 250,
-            skillPoints: 0,
+            skillPoints: 1,
             x: 13.5,
             y: 11.5,
             mapId: 'burnaz_sahil',

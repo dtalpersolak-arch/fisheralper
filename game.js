@@ -1672,10 +1672,10 @@ const player = {
     pendingInteraction: null,
     walkCycle: 0,
     gold: 250,
-    // Seviye & EXP Sistemi (Maksimum Lv 10)
+    // Seviye & EXP Sistemi (Maksimum Lv 20)
     level: 1,
     exp: 0, // 0..100 yüzde
-    skillPoints: 0,
+    skillPoints: 1,
     // Satın alınan tekneler (Envantere girmez, kalıcı olarak oyuncuya ait olur)
     ownedBoats: [],
     activeBoatId: 'boat_raft',
@@ -14881,6 +14881,14 @@ function applyLoadedCharacter(c) {
         if (c.gold !== undefined) player.gold = c.gold;
         if (c.skillPoints !== undefined) player.skillPoints = c.skillPoints;
         if (c.skills) Object.assign(player.skills, c.skills);
+
+        // Seviye ve yetenek puanı dengelemesi (Her seviye için toplam 1 puan: 1. seviyede 1 puan, 20. seviyede toplam 20 puan)
+        const pLevel = Math.max(1, Number(player.level) || 1);
+        const totalSpent = Object.values(player.skills || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+        const currentTotal = (Number(player.skillPoints) || 0) + totalSpent;
+        if (currentTotal < pLevel) {
+            player.skillPoints = (Number(player.skillPoints) || 0) + (pLevel - currentTotal);
+        }
         if (c.equipped) Object.assign(player.equipped, c.equipped);
         if (Array.isArray(c.inventory)) player.inventory = c.inventory;
         if (Array.isArray(c.storage)) player.storage = c.storage;
