@@ -1243,13 +1243,13 @@ const ITEMS = {
         sellPrice: 250
     },
 
-    // --- KOSTÜMLER (BAŞLANGIÇ & ÖRS İLE +5 GÜÇLENDİRİLEBİLİR) ---
+    // --- KOSTÜMLER (BAŞLANGIÇ & ÖRS İLE +7 GÜÇLENDİRİLEBİLİR) ---
     costume_fisher: {
         id: 'costume_fisher',
         name: 'Hasır Şapkalı Balıkçı',
         type: 'costume',
         typeName: 'Kostüm',
-        desc: 'Güneşten koruyan hasır şapka ve rahat mavi sahil yeleği. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Güneşten koruyan hasır şapka ve rahat mavi sahil yeleği. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir (+7\'de efsanevi alev saçar).',
         shirt: '#3a86ff',
         vest: '#8c6239',
         pants: '#2b2d42',
@@ -1262,7 +1262,7 @@ const ITEMS = {
         name: 'Korsan Kaptan Kostümü',
         type: 'costume',
         typeName: 'Korsan Kostümü',
-        desc: 'Yedi denizlerin hakimi kırmızı kaptan ceketi ve korsan şapkası. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Yedi denizlerin hakimi kırmızı kaptan ceketi ve korsan şapkası. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir (+7\'de efsanevi alev saçar).',
         shirt: '#d90429',
         vest: '#ffb703',
         pants: '#1d1e2c',
@@ -1275,7 +1275,7 @@ const ITEMS = {
         name: 'Kutup Kaşifi Parkası',
         type: 'costume',
         typeName: 'Kostüm',
-        desc: 'Rüzgarlı deniz kıyıları için turkuaz kürklü su geçirmez kostüm. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Rüzgarlı deniz kıyıları için turkuaz kürklü su geçirmez kostüm. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir (+7\'de efsanevi alev saçar).',
         shirt: '#2ec4b6',
         vest: '#cbf3f0',
         pants: '#264653',
@@ -1290,7 +1290,7 @@ const ITEMS = {
         name: 'Deniz Kurdu Kıyafeti',
         type: 'costume',
         typeName: 'Balıkçı Kostümü',
-        desc: 'Azgın dalgalarla boğuşmuş emektar bir denizcinin yıpranmaz lacivert süveteri ve denizci beresi. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Azgın dalgalarla boğuşmuş emektar bir denizcinin yıpranmaz lacivert süveteri ve denizci beresi. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir.',
         shirt: '#1d3557',
         vest: '#457b9d',
         pants: '#2b2d42',
@@ -1303,7 +1303,7 @@ const ITEMS = {
         name: 'Karayip Yağmacısı',
         type: 'costume',
         typeName: 'Korsan Kostümü',
-        desc: 'Karanlık sularda korku salan korsanların giydiği meşin yelek, altın tokalı kemer ve korsan bandanası. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Karanlık sularda korku salan korsanların giydiği meşin yelek, altın tokalı kemer ve korsan bandanası. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir.',
         shirt: '#3d0c02',
         vest: '#9d0208',
         pants: '#1a1a24',
@@ -1316,7 +1316,7 @@ const ITEMS = {
         name: 'Derin Su Dalgıcı',
         type: 'costume',
         typeName: 'Dalgıç Kostümü',
-        desc: 'Okyanusun en derin çukurlarındaki antik batıklara inebilmek için pirinç detaylı ve cam başlıklı dalgıç tulumu. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Okyanusun en derin çukurlarındaki antik batıklara inebilmek için pirinç detaylı ve cam başlıklı dalgıç tulumu. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir.',
         shirt: '#2b9348',
         vest: '#d4a373',
         pants: '#1b4332',
@@ -1329,7 +1329,7 @@ const ITEMS = {
         name: 'Barbaros Korsan Zırhı',
         type: 'costume',
         typeName: 'Korsan Kaptan Zırhı',
-        desc: 'Kızıl kadife ceket, sırmalı omuzluklar ve tüylü korsan şapkasıyla donatılmış heybetli bir kaptan üniforması. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Kızıl kadife ceket, sırmalı omuzluklar ve tüylü korsan şapkasıyla donatılmış heybetli bir kaptan üniforması. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir.',
         shirt: '#6a040f',
         vest: '#ffb703',
         pants: '#03071e',
@@ -1342,7 +1342,7 @@ const ITEMS = {
         name: 'Usta Olta Balıkçısı',
         type: 'costume',
         typeName: 'Usta Balıkçı Kostümü',
-        desc: 'Ceplerinde özel yapay sinekler ve iğneler bulunan haki balıkçı yeleği ve güneş korumalı safari şapkası. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Ceplerinde özel yapay sinekler ve iğneler bulunan haki balıkçı yeleği ve güneş korumalı safari şapkası. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir.',
         shirt: '#588157',
         vest: '#a3b18b',
         pants: '#344e41',
@@ -1357,7 +1357,7 @@ const ITEMS = {
         name: 'Kraliyet Muhafızı Kostümü',
         type: 'costume',
         typeName: 'Efsanevi Kraliyet Kostümü',
-        desc: 'Işıl ışıl parıldayan saf altın ve kraliyet safiriyle örülü efsanevi zırh. Okyanus derinliklerinden (%0.01) drop olur. Giydiğinde etrafına göz alıcı parlama efekti ve kraliyet aurası yayar. Efsunlu Örs\'te +5\'e kadar güçlendirilebilir.',
+        desc: 'Işıl ışıl parıldayan saf altın ve kraliyet safiriyle örülü efsanevi zırh. Okyanus derinliklerinden (%0.01) drop olur. Giydiğinde etrafına göz alıcı parlama efekti ve kraliyet aurası yayar. Efsunlu Örs\'te +7\'ye kadar güçlendirilebilir (+7\'de efsanevi alev saçar).',
         shirt: '#1e3d59',
         vest: '#ffd166',
         pants: '#0f172a',
@@ -4227,7 +4227,7 @@ function renderTailorModal(container) {
                 <div>
                     <h3>🧵 Kostümcü Selim (Korsan & Usta Balıkçı Terzisi)</h3>
                     <div style="font-size:12px; color:#adb5bd; margin-top:3px;">
-                        Tüm kostümler <b>Efsunlu Örs'te +5'e kadar</b> güçlendirilebilir! Yeni bir kostüm satın alarak görünüşünü ve niteliklerini zenginleştir.
+                        Tüm kostümler <b>Efsunlu Örs'te +7'ye kadar</b> güçlendirilebilir! Yeni bir kostüm satın alarak görünüşünü ve niteliklerini zenginleştir.
                     </div>
                 </div>
                 <span class="price-tag">🪙 ${player.gold} Altın</span>
@@ -8868,7 +8868,7 @@ function renderWikiTab(tabKey) {
                     <div class="wiki-card">
                         <strong style="color: #ef4444; font-size: 14px;">🔨 Efsunlu Örs (Anvil)</strong>
                         <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">Ekipman & Kostüm Güçlendirme</div>
-                        <p style="font-size: 12.5px; color: #cbd5e1; margin: 0;">Oltalarını ve kostümlerini +1'den +5'e kadar yükseltir. Her seviye ekstra hız ve nadirlik bonusu verir.</p>
+                        <p style="font-size: 12.5px; color: #cbd5e1; margin: 0;">Oltalarını ve kostümlerini +1'den +7'ye kadar yükseltir. +3'e kadar yanmaz, +7'de ise efsanevi alev saçar!</p>
                     </div>
                     <div class="wiki-card">
                         <strong style="color: #f97316; font-size: 14px;">🎲 Bahisçi Bülo</strong>
@@ -8981,10 +8981,10 @@ function renderWikiTab(tabKey) {
     } else if (tabKey === 'anvil') {
         html = `
             <div class="wiki-section">
-                <h3 class="wiki-section-title">🔨 Efsunlu Örs (Anvil) Sistemi</h3>
+                <h3 class="wiki-section-title">🔨 Efsunlu Örs (Anvil) Sistemi (+7 Sınırı)</h3>
                 <div class="wiki-card">
                     <p style="margin: 0 0 10px 0; color: #cbd5e1; line-height: 1.6;">
-                        Dörtyol Zanaat Kulesi'nin hemen yanında bulunan <strong>Efsunlu Örs</strong>, ekipmanlarının potansiyelini zirveye çıkarır. Tüm oltalar ve kostümler <strong>en fazla +5 seviyeye kadar</strong> güçlendirilebilir.
+                        Dörtyol Zanaat Kulesi'nin hemen yanında bulunan <strong>Efsunlu Örs</strong>, ekipmanlarının potansiyelini zirveye çıkarır. Tüm oltalar ve kostümler <strong>en fazla +7 seviyeye kadar</strong> güçlendirilebilir.
                     </p>
                     <p style="margin: 0; color: #94a3b8; font-size: 13px;">
                         Güçlendirme işlemi için envanterinde <strong>Efsun Parşömeni</strong> bulunması gerekir.
@@ -8993,10 +8993,11 @@ function renderWikiTab(tabKey) {
             </div>
 
             <div class="wiki-section">
-                <h3 class="wiki-section-title">🛡️ Kadim Koruma Parşömeni & Yanma Koruması</h3>
+                <h3 class="wiki-section-title">🛡️ +3 Güvenli Bölge & +4+ Tehlike Koruması</h3>
                 <div class="wiki-card">
                     <div class="wiki-tip" style="margin-bottom: 10px;">
-                        🛡️ <strong>Kadim Koruma Parşömeni:</strong> Yüksek seviyelere (+3, +4, +5) eşya basarken başarısız olursan eşyanın kırılmasını veya seviyesinin düşmesini %100 engelleyen eşsiz bir koruyucu büyüdür.
+                        🛡️ <strong>+3'e Kadar Güvenli Bölge:</strong> +1, +2 veya +3 basarken başarısız olsan dahi eşyan kesinlikle yok olmaz ve silinmez!<br>
+                        ⚠️ <strong>+4 ve Sonrası Tehlike Bölgesi:</strong> +4, +5, +6 veya +7 basarken başarısız olursan koruma parşömeni olmadan <strong>eşya parçalanır ve yok olur!</strong> 3. slota <strong>Kadim Koruma Parşömeni</strong> koyarsan eşyan silinmek yerine +0'a düşerek kurtulur.
                     </div>
                     <p style="margin: 0; font-size: 13px; color: #cbd5e1; line-height: 1.5;">
                         Kadim Koruma Parşömeni'ni Simyacı Efsun'dan satın alabilir, Bahisçi Bülo'nun çarkından kazanabilir veya açık denizlerde avlanırken %1.0 drop şansıyla elde edebilirsin.
@@ -9005,22 +9006,22 @@ function renderWikiTab(tabKey) {
             </div>
 
             <div class="wiki-section">
-                <h3 class="wiki-section-title">📈 Kümülatif Başarı Bonusu (Pity Mekaniği)</h3>
+                <h3 class="wiki-section-title">🔥 +7 Efsanevi Efektler ("Ben Buradayım!")</h3>
                 <div class="wiki-card">
                     <p style="margin: 0 0 8px 0; color: #cbd5e1; line-height: 1.6;">
-                        Efsunlu Örs'te yaptığın bir güçlendirme denemesi başarısız olduğunda sistem harcadığın emeği ödüllendirir:
+                        Bir olta veya kostüm +7 seviyesine ulaştığında:
                     </p>
-                    <div class="wiki-tip">
-                        🌟 <strong>Her başarısız denemede bir sonraki şansına kalıcı +%5 Başarı Oranı eklenir!</strong> Bu bonus eşya başarıyla bir üst seviyeye geçene kadar birikmeye devam eder. Böylece asla sonsuz bir şanssızlık döngüsüne girmezsin.
+                    <div class="wiki-tip" style="border-color:#ff5400; color:#ffd166; background:rgba(255,84,0,0.12);">
+                        🔥 <strong>Görsel Şölen:</strong> Yerde dönen çift halkalı runik mühür çemberi, etrafında dönen güneş kıvılcımları, silahta 3 katmanlı plazma alev akışı ve uç vortex parlaması aktifleşir. Tüm oyuncular bu efekti canlı olarak görür!
                     </div>
                 </div>
             </div>
 
             <div class="wiki-section">
-                <h3 class="wiki-section-title">👘 Kostüm Yükseltmeleri (+5 Sınırı)</h3>
+                <h3 class="wiki-section-title">👘 Kostüm Yükseltmeleri (+7 Sınırı)</h3>
                 <div class="wiki-card">
                     <p style="margin: 0; color: #cbd5e1; line-height: 1.6;">
-                        Oyundaki başlangıç kostümleri (Acemi, Mavi Denizci, Kırmızı Kaptan), Kaptan Barbaros'un butiğindeki 5 korsan kostümü ve efsanevi Kraliyet Muhafızı kostümü dahil <strong>tüm kostümler</strong> örste +5'e basılabilir. Her artı seviyesi balık tutma hızı, auto-hunt verimi ve ekstra koruma yüzdeleri kazandırır!
+                        Oyundaki tüm kostümler (Acemi, Mavi Denizci, Kırmızı Kaptan, Kaptan Barbaros butik kostümleri ve efsanevi Kraliyet Muhafızı) örste +7'ye basılabilir. Her artı seviyesi balık tutma hızı, auto-hunt verimi ve ekstra efsun özellikleri kazandırır!
                     </p>
                 </div>
             </div>
@@ -9246,7 +9247,7 @@ function renderWikiTab(tabKey) {
                         </div>
                     </div>
                     <div class="wiki-tip" style="margin-top: 10px;">
-                        🔨 Üstelik Kraliyet Muhafızı kostümü Efsunlu Örs'te <strong>+5'e kadar yükseltilebilir</strong>; güçlendirildikçe tüm bu değerler katbekat artar!
+                        🔨 Üstelik Kraliyet Muhafızı kostümü Efsunlu Örs'te <strong>+7'ye kadar yükseltilebilir</strong>; +7 seviyesinde efsanevi alev aurası ve çift runik mühür çemberi açılır!
                     </div>
                 </div>
             </div>
@@ -10084,11 +10085,20 @@ function renderAdminBoatsTab(container) {
 // SEKME 3: EFSUN ORANLARI, YETENEK AĞACI VE OYUN KURALLARI
 function renderAdminRulesTab(container) {
     let enchantInputsHtml = '';
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < MAX_ENCHANT_COUNT; i++) {
+        const isSafe = i < 3;
+        const statusBadge = isSafe
+            ? '<span style="color:#80ed99; font-weight:700; font-size:10.5px;">[🛡️ Güvenli Bölge]</span>'
+            : (i === (MAX_ENCHANT_COUNT - 1)
+                ? '<span style="color:#ff5400; font-weight:800; font-size:10.5px;">[🔥 Efsanevi +7]</span>'
+                : '<span style="color:#ff595e; font-weight:700; font-size:10.5px;">[⚠️ Tehlikeli Bölge]</span>');
         enchantInputsHtml += `
             <div class="admin-field">
-                <label>${i + 1}. Efsun Başarı Şansı (%)</label>
-                <input type="number" min="1" max="100" class="admin-input" data-enchidx="${i}" value="${ENCHANT_SUCCESS_RATES[i] ?? 10}">
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>+${i + 1} Efsun Başarı Şansı (%)</span>
+                    ${statusBadge}
+                </label>
+                <input type="number" min="1" max="100" class="admin-input" data-enchidx="${i}" value="${ENCHANT_SUCCESS_RATES[i] ?? (isSafe ? 50 : 5)}">
             </div>
         `;
     }
@@ -10108,15 +10118,20 @@ function renderAdminRulesTab(container) {
         <div class="npc-split">
             <div class="npc-panel">
                 <div class="npc-panel-header">
-                    <h3>🔨 Efsun Oranları & Anvil Kuralları</h3>
+                    <h3>🔨 Efsun Oranları & Anvil Kuralları (+7 Sınırı)</h3>
+                    <span style="font-size:11.5px; color:#ffd166;">+3'e kadar yanmaz, +4+ korumasız yok olur</span>
                 </div>
                 <div class="admin-form-grid">
                     ${enchantInputsHtml}
                     <div class="admin-field">
-                        <label>Başarısız Efsunda Olta Silinsin mi?</label>
+                        <label>Maksimum Efsun Sınırı (+ Değeri)</label>
+                        <input type="number" min="3" max="15" class="admin-input" id="rule-max-enchant-count" value="${MAX_ENCHANT_COUNT}">
+                    </div>
+                    <div class="admin-field">
+                        <label>Tehlikeli Bölgede Başarısız Efsunda Eşya Silinsin mi?</label>
                         <select class="admin-select" id="rule-destroy-rod">
-                            <option value="true" ${GAME_RULES.destroyRodOnFail ? 'selected' : ''}>Evet, Olta Yok Olsun</option>
-                            <option value="false" ${!GAME_RULES.destroyRodOnFail ? 'selected' : ''}>Hayır, Olta Korunsun</option>
+                            <option value="true" ${GAME_RULES.destroyRodOnFail ? 'selected' : ''}>Evet, +4+ Başarısızlıkta Eşya Yok Olsun</option>
+                            <option value="false" ${!GAME_RULES.destroyRodOnFail ? 'selected' : ''}>Hayır, Güvenli Mod (Silinmez)</option>
                         </select>
                     </div>
                 </div>
@@ -10169,6 +10184,13 @@ function renderAdminRulesTab(container) {
             const idx = parseInt(inp.getAttribute('data-enchidx'));
             ENCHANT_SUCCESS_RATES[idx] = Math.max(1, Math.min(100, parseFloat(inp.value) || 10));
         });
+        const maxEnchInp = document.getElementById('rule-max-enchant-count');
+        if (maxEnchInp) {
+            MAX_ENCHANT_COUNT = Math.max(3, Math.min(15, parseInt(maxEnchInp.value) || 7));
+            while (ENCHANT_SUCCESS_RATES.length < MAX_ENCHANT_COUNT) {
+                ENCHANT_SUCCESS_RATES.push(2);
+            }
+        }
         GAME_RULES.destroyRodOnFail = document.getElementById('rule-destroy-rod').value === 'true';
         GAME_RULES.minWaitSec = Math.max(1, parseFloat(document.getElementById('rule-min-wait').value) || 10);
         GAME_RULES.maxWaitSec = Math.max(GAME_RULES.minWaitSec, parseFloat(document.getElementById('rule-max-wait').value) || 20);
@@ -10177,7 +10199,8 @@ function renderAdminRulesTab(container) {
 
         updateAutoHuntPenaltyLabels();
         saveConfigToLocalStorage();
-        showToast('✅ Efsun ve oyun kuralları güncellendi!', '#80ed99');
+        renderAdminRulesTab(container);
+        showToast('✅ +7 Efsun ve oyun kuralları başarıyla kaydedildi!', '#80ed99');
     };
 
     document.getElementById('save-skills-cfg-btn').onclick = () => {
@@ -10879,12 +10902,32 @@ function renderAdminGMTab(container) {
                         <label>Adet</label>
                         <input type="number" min="1" max="99" class="admin-input" id="gm-give-count" value="1">
                     </div>
+                    <div class="admin-field">
+                        <label>Efsun / + Seviyesi</label>
+                        <select class="admin-select" id="gm-give-plus" style="font-weight:700;">
+                            <option value="0">+0 (Efsunsuz / Normal)</option>
+                            <option value="1">+1</option>
+                            <option value="2">+2</option>
+                            <option value="3">+3 (Güvenli Son Kademe)</option>
+                            <option value="4">+4 (Tehlike Başlangıcı)</option>
+                            <option value="5">+5</option>
+                            <option value="6">+6</option>
+                            <option value="7" selected>🔥 +7 (Efsanevi Alev Efekti)</option>
+                        </select>
+                    </div>
                 </div>
-                <button class="action-btn success" id="gm-give-btn" style="margin-top:12px; width:100%; padding:8px;">🎒 Çantaya Ekle</button>
-                <div style="display:flex; gap:6px; margin-top:8px;">
-                    <button class="action-btn" id="gm-give-royal-btn" style="flex:1; padding:6px 4px; font-size:11px; border-color:#ffd166; color:#ffd166; font-weight:700;">👑 Kraliyet Kostümü</button>
-                    <button class="action-btn" id="gm-give-plus5-royal-btn" style="flex:1; padding:6px 4px; font-size:11px; border-color:#00f5d4; color:#00f5d4; font-weight:700;">⚡ +5 Kraliyet</button>
-                    <button class="action-btn" id="gm-give-all-costumes-btn" style="flex:1; padding:6px 4px; font-size:11px;">🧵 5 Yeni Kostüm</button>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button class="action-btn success" id="gm-give-btn" style="flex:1; padding:9px 10px; font-weight:700;">🎒 Çantaya Ekle</button>
+                    <button class="action-btn" id="gm-give-direct-plus7-btn" style="flex:1.2; padding:9px 10px; background:linear-gradient(135deg, #d90429, #ff5400); border-color:#ffd166; color:#fff; font-weight:800; box-shadow:0 0 10px rgba(255,84,0,0.45);">🔥 Anında +7 Olarak Ver</button>
+                </div>
+                <div class="npc-panel-header" style="margin-top:14px;">
+                    <h3 style="font-size:12px; color:#ffd166;">⚡ Hızlı +7 Test Eşyaları (Görsel Efektler)</h3>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+                    <button class="action-btn" id="gm-give-plus7-royal-btn" style="flex:1; min-width:130px; padding:6px 4px; font-size:11px; border-color:#ff5400; color:#ffd166; font-weight:800; background:rgba(255,84,0,0.15);">👑🔥 +7 Kraliyet Kostümü</button>
+                    <button class="action-btn" id="gm-give-plus7-star-rod-btn" style="flex:1; min-width:130px; padding:6px 4px; font-size:11px; border-color:#00f5d4; color:#00f5d4; font-weight:800; background:rgba(0,245,212,0.12);">🌟🔥 +7 SOS Oltası</button>
+                    <button class="action-btn" id="gm-give-plus7-dragon-rod-btn" style="flex:1; min-width:130px; padding:6px 4px; font-size:11px; border-color:#c77dff; color:#e0aaff; font-weight:800;">🎣🔥 +7 Ejder Oltası</button>
+                    <button class="action-btn" id="gm-give-all-costumes-btn" style="flex:1; min-width:110px; padding:6px 4px; font-size:11px;">🧵 5 Yeni Kostüm</button>
                 </div>
 
                 <div class="npc-panel-header" style="margin-top:16px;"><h3>💠 Hızlı Işınlanma</h3></div>
@@ -10986,26 +11029,99 @@ function renderAdminGMTab(container) {
     document.getElementById('gm-give-btn').onclick = () => {
         const id = document.getElementById('gm-give-select').value;
         const cnt = Math.max(1, parseInt(document.getElementById('gm-give-count').value) || 1);
-        if (addItemToInventory(id, cnt)) {
-            showToast(`🎁 ${cnt}x ${ITEMS[id].name} çantaya eklendi!`, '#80ed99');
+        const plus = parseInt(document.getElementById('gm-give-plus').value) || 0;
+        const it = ITEMS[id];
+        if (!it) return;
+
+        let ench = null;
+        if (plus > 0) {
+            ench = {
+                count: plus,
+                luck: plus * 5,
+                speed: plus * 5,
+                control: plus * 5
+            };
+            if (it.type === 'costume') {
+                player.costumeEnchants = player.costumeEnchants || {};
+                player.costumeEnchants[id] = { ...ench };
+            } else if (it.type === 'rod') {
+                player.rodEnchants = player.rodEnchants || {};
+                player.rodEnchants[id] = { ...ench };
+            }
+        }
+
+        if (addItemToInventory(id, cnt, ench)) {
+            const plusTag = plus > 0 ? ` (+${plus})` : '';
+            showToast(`🎁 ${cnt}x ${it.name}${plusTag} çantaya eklendi!`, plus >= 7 ? '#ff5400' : '#80ed99');
+            renderInventoryUI();
+            renderBuffBar();
+            syncPlayerProfileToNetwork();
         } else {
             showToast('⚠️ Çanta dolu!', '#ff595e');
         }
     };
 
-    document.getElementById('gm-give-royal-btn').onclick = () => {
-        if (addItemToInventory('costume_royal_guard', 1)) {
-            showToast('👑 Kraliyet Muhafızı Kostümü çantana eklendi!', '#ffd166');
+    document.getElementById('gm-give-direct-plus7-btn').onclick = () => {
+        const id = document.getElementById('gm-give-select').value;
+        const it = ITEMS[id];
+        if (!it) return;
+
+        const ench = { count: 7, luck: 35, speed: 35, control: 35 };
+        if (it.type === 'costume') {
+            player.costumeEnchants = player.costumeEnchants || {};
+            player.costumeEnchants[id] = { ...ench };
+        } else if (it.type === 'rod') {
+            player.rodEnchants = player.rodEnchants || {};
+            player.rodEnchants[id] = { ...ench };
+        }
+
+        if (addItemToInventory(id, 1, ench)) {
+            showToast(`🔥 EFSANEVİ +7 ${it.name} çantaya eklendi!`, '#ff5400', 4000);
             renderInventoryUI();
+            renderBuffBar();
+            syncPlayerProfileToNetwork();
         } else {
             showToast('⚠️ Çanta dolu!', '#ff595e');
         }
     };
 
-    document.getElementById('gm-give-plus5-royal-btn').onclick = () => {
-        if (addItemToInventory('costume_royal_guard', 1, { count: 5, luck: 20, speed: 30, control: 30 })) {
-            showToast('⚡ +5 Efsunlu Kraliyet Muhafızı Kostümü çantana eklendi!', '#00f5d4');
+    document.getElementById('gm-give-plus7-royal-btn').onclick = () => {
+        const ench = { count: 7, luck: 35, speed: 35, control: 35 };
+        player.costumeEnchants = player.costumeEnchants || {};
+        player.costumeEnchants['costume_royal_guard'] = { ...ench };
+        if (addItemToInventory('costume_royal_guard', 1, ench)) {
+            showToast('👑🔥 EFSANEVİ +7 Kraliyet Muhafızı Kostümü çantana eklendi!', '#ff5400', 4000);
             renderInventoryUI();
+            renderBuffBar();
+            syncPlayerProfileToNetwork();
+        } else {
+            showToast('⚠️ Çanta dolu!', '#ff595e');
+        }
+    };
+
+    document.getElementById('gm-give-plus7-star-rod-btn').onclick = () => {
+        const ench = { count: 7, luck: 35, speed: 35, control: 35 };
+        player.rodEnchants = player.rodEnchants || {};
+        player.rodEnchants['rod_burak'] = { ...ench };
+        if (addItemToInventory('rod_burak', 1, ench)) {
+            showToast("🌟🔥 EFSANEVİ +7 Balıkçı Burak'ın Efsunlu Oltası (SOS) çantana eklendi!", '#00f5d4', 4000);
+            renderInventoryUI();
+            renderBuffBar();
+            syncPlayerProfileToNetwork();
+        } else {
+            showToast('⚠️ Çanta dolu!', '#ff595e');
+        }
+    };
+
+    document.getElementById('gm-give-plus7-dragon-rod-btn').onclick = () => {
+        const ench = { count: 7, luck: 35, speed: 35, control: 35 };
+        player.rodEnchants = player.rodEnchants || {};
+        player.rodEnchants['rod_dragon'] = { ...ench };
+        if (addItemToInventory('rod_dragon', 1, ench)) {
+            showToast('🎣🔥 EFSANEVİ +7 Altın Ejder Oltası çantana eklendi!', '#c77dff', 4000);
+            renderInventoryUI();
+            renderBuffBar();
+            syncPlayerProfileToNetwork();
         } else {
             showToast('⚠️ Çanta dolu!', '#ff595e');
         }
